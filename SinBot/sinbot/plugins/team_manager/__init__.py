@@ -1,4 +1,4 @@
-import nonebot
+from nonebot import load_plugins
 from nonebot import get_plugin_config
 from nonebot.plugin import PluginMetadata
 from pathlib import Path
@@ -13,6 +13,8 @@ __plugin_meta__ = PluginMetadata(
 )
 
 config = get_plugin_config(Config)
-sub_plugins = nonebot.load_plugins(
+sub_plugins = load_plugins(
     str(Path(__file__).parent.joinpath("plugins").resolve())
 )
+
+from .service import team_service
