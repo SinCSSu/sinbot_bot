@@ -1259,6 +1259,12 @@ wheels = [
 ]
 
 [[package]]
+name = "require"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ef/77/292381a3dd42abffee3e8270531578d7ab862ee1191787f7528cea272ca0/require-0.1.1.tar.gz", hash = "sha256:a6ad4d5b20d7978e17d98580be546d13fc55c6e79972405d05915cc7edc68d40", size = 4305, upload-time = "2014-11-19T17:03:37.471Z" }
+
+[[package]]
 name = "ruff"
 version = "0.16.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1293,6 +1299,7 @@ dependencies = [
     { name = "nonebot-adapter-qq" },
     { name = "nonebot-plugin-orm" },
     { name = "nonebot2", extra = ["fastapi", "websockets"] },
+    { name = "require" },
 ]
 
 [package.optional-dependencies]
@@ -1309,6 +1316,7 @@ requires-dist = [
     { name = "nonebot-plugin-orm", specifier = ">=0.8.3" },
     { name = "nonebot2", extras = ["fastapi", "websockets"], specifier = ">=2.5.0" },
     { name = "pyright", extras = ["nodejs"], marker = "extra == 'dev'" },
+    { name = "require", specifier = ">=0.1.1" },
     { name = "ruff", marker = "extra == 'dev'" },
 ]
 provides-extras = ["dev"]

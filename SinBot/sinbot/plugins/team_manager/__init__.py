@@ -1,7 +1,9 @@
-from nonebot import load_plugins
+from nonebot import load_plugins, require
 from nonebot import get_plugin_config
 from nonebot.plugin import PluginMetadata
 from pathlib import Path
+
+require("nonebot_plugin_orm")
 
 from .config import Config
 

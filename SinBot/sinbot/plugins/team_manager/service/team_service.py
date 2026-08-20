@@ -1,13 +1,75 @@
 from nonebot import logger
 from nonebot import on_command
+from nonebot.adapters.onebot.v11 import GroupMessageEvent
 from nonebot.rule import to_me
 from nonebot.adapters import Event
 from nonebot.matcher import Matcher
+
+from ..dao.team_dao import insert_new_team
+from ..model.entity.member import Member
+from ..model.entity.team import Team
+from ..model.vo.create_team_vo import CreateTeamVo
+from ..utils.date_utils import parse_date_from_input_with_parser
 from ...controller import team_controller
 
 
+# 开团 今晚八点 yx
+# 开团 yx 今晚八点
+# 开团 yx 今晚八点 有事别报
+# 开团 yx 今晚八点 无限制 有事别报
 @team_controller.create_team.handle()
-async def create_team(message: Event):
-    print(message)
+async def create_team(message: Event, event: GroupMessageEvent):
     logger.info("开始创建团队")
-    await team_controller.create_team.finish("开团")
+    full_command = message.get_plaintext()
+    command_list = full_command.split()
+    if len(command_list) > 5:
+        await team_controller.create_team.finish("参数过多！")
+    team_start_time = None
+    team_name = None
+    limit_flag = True
+    llm_flag = False
+    create_team_vo = CreateTeamVo()
+    if "无限制" in command_list:
+        limit_flag = False
+        command_list.remove("无限制")
+
+    # 防止记不清时间和副本名的顺序，适配了两种方式
+    if team_start_time := parse_date_from_input_with_parser(command_list[1]):
+        create_team_vo.start_time = team_start_time
+        create_team_vo.team_name = command_list[2]
+    if team_start_time := parse_date_from_input_with_parser(command_list[2]):
+        if create_team_vo.start_time:
+            await team_controller.create_team.finish("时间参数输入过多！")
+        else:
+            create_team_vo.start_time = team_start_time
+            create_team_vo.team_name = command_list[1]
+    if not create_team_vo.start_time:
+        create_team_vo = __parse_team_info_with_llm(full_command)  # 无法解析日期，使用llm兜底
+        llm_flag = True
+
+    if not team_start_time and not create_team_vo:
+        await team_controller.create_team.finish("参数输入错误。")
+
+    if not llm_flag:
+        create_team_vo.limit_method = 1 if limit_flag else 0
+        if len(command_list) == 4:
+            create_team_vo.comment = command_list[-1]
+
+    create_team_vo.create_by = message.get_user_id()
+    if event:
+        create_team_vo.group_number = event.group_id
+    else:
+        create_team_vo.group_number = '-1'
+
+    if await insert_new_team(create_team_vo):
+        logger.info(f"创建在{create_team_vo.start_time}的团队{create_team_vo.team_name}成功！")
+        await team_controller.create_team.finish(
+            f"创建在{create_team_vo.start_time}的团队{create_team_vo.team_name}成功！")
+    else:
+        logger.error(f"创建在{create_team_vo.start_time}的团队{create_team_vo.team_name}失败！")
+        await team_controller.create_team.finish(
+            f"数据库内部错误，请联系管理员！")
+
+
+def __parse_team_info_with_llm(full_commend: str) -> CreateTeamVo:
+    pass

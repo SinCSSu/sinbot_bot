@@ -10,6 +10,7 @@ dependencies = [
     "nonebot-adapter-qq>=1.7.2",
     "nonebot-plugin-orm>=0.8.3",
     "datetime>=6.0",
+    "require>=0.1.1",
 ]
 
 [project.optional-dependencies]
