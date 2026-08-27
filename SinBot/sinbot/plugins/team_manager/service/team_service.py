@@ -4,7 +4,9 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent
 from nonebot.rule import to_me
 from nonebot.adapters import Event
 from nonebot.matcher import Matcher
+from sqlalchemy.exc import NoResultFound
 
+from ..dao import spec_dao
 from ..dao.team_dao import insert_new_team
 from ..model.entity.member import Member
 from ..model.entity.team import Team
@@ -21,7 +23,7 @@ from ...controller import team_controller
 async def create_team(message: Event, event: GroupMessageEvent):
     logger.info("开始创建团队")
     full_command = message.get_plaintext()
-    command_list = full_command.split()
+    command_list = full_command.strip().split()
     if len(command_list) > 5:
         await team_controller.create_team.finish("参数过多！")
     team_start_time = None
@@ -73,3 +75,38 @@ async def create_team(message: Event, event: GroupMessageEvent):
 
 def __parse_team_info_with_llm(full_commend: str) -> CreateTeamVo:
     pass
+
+
+# 报名 1 蓬莱 辰韶
+# 报名 1 蓬莱 辰韶 1
+
+@team_controller.join_team.handle()
+async def join_team(message: Event, event: GroupMessageEvent):
+    logger.info("加入团队")
+    full_command = message.get_plaintext()
+    command_list = full_command.strip().split()
+    if len(command_list) > 5:
+        await team_controller.join_team.finish("参数过多！")
+    if len(command_list) < 3:
+        await team_controller.join_team.finish("参数过少！")
+
+    available_team_list = __get_available_team_list(str(event.group_id))
+
+    if available_team_list
+
+    if not command_list[1].isdecimal():
+
+
+
+    try:
+        await spec_dao.get_spec_id_by_name_or_nickname(command_list[2])
+    except NoResultFound as e:
+        logger.error(f"查询心法名称返回空:{command_list[2]}")
+        await team_controller.join_team.finish("请输入正确的心法名称！")
+
+    await team_controller.join_team.finish("test")
+
+async def __get_available_team_list(group_number:str)->list:
+    pass
+
+
