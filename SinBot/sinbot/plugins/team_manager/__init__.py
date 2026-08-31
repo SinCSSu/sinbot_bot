@@ -15,8 +15,5 @@ __plugin_meta__ = PluginMetadata(
 )
 
 config = get_plugin_config(Config)
-sub_plugins = load_plugins(
-    str(Path(__file__).parent.joinpath("plugins").resolve())
-)
 
 from .service import team_service
