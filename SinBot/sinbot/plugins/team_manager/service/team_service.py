@@ -92,9 +92,9 @@ async def join_team(message: Event, event: GroupMessageEvent):
 
     available_team_list = __get_available_team_list(str(event.group_id))
 
-    if available_team_list
-
-    if not command_list[1].isdecimal():
+    # if available_team_list
+    #
+    # if not command_list[1].isdecimal():
 
 
 
