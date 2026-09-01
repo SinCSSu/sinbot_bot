@@ -11,6 +11,7 @@ dependencies = [
     "nonebot-plugin-orm>=0.8.3",
     "datetime>=6.0",
     "require>=0.1.1",
+    "openai>=3.6.0",
 ]
 
 [project.optional-dependencies]
