@@ -107,7 +107,7 @@ class SchemaBuilderTest(unittest.TestCase):
     def test_optional_without_default_is_required(self) -> None:
         def fetch(user_id: int | None) -> str:
             """按用户 ID 查询，允许空值。"""
-            return str(user_id)
+            return f"用户 ID: {user_id}"
 
         schema = build_tool_schema(fetch)
         parameters = schema["function"]["parameters"]
@@ -221,6 +221,12 @@ class LLMClientChatTest(unittest.TestCase):
         self.assertEqual(len(tool_messages), 1)
         self.assertEqual(tool_messages[0]["content"], "42")
         self.assertEqual(tool_messages[0]["tool_call_id"], "call_1")
+        # tool_results 保留原始返回值（int），未字符串化
+        self.assertEqual(len(result.tool_results), 1)
+        self.assertEqual(result.tool_results[0].name, "double")
+        self.assertEqual(result.tool_results[0].tool_call_id, "call_1")
+        self.assertEqual(result.tool_results[0].value, 42)
+        self.assertIsInstance(result.tool_results[0].value, int)
 
     def test_chat_without_tools(self) -> None:
         client = LLMClient(api_key="", model="test-model")
@@ -240,6 +246,7 @@ class LLMClientChatTest(unittest.TestCase):
         self.assertEqual(result.reply, "你好")
         self.assertEqual(result.tool_call_turns, 0)
         self.assertNotIn("tools", calls[0])
+        self.assertEqual(result.tool_results, [])
 
     def test_chat_tool_error_handled(self) -> None:
         client = LLMClient(api_key="", model="test-model")
@@ -249,7 +256,7 @@ class LLMClientChatTest(unittest.TestCase):
             """除法。"""
             return a // b
 
-        async def fake_create(**kwargs: object) -> SimpleNamespace:  # noqa: ARG001
+        async def fake_create(**_kwargs: object) -> SimpleNamespace:
             message = SimpleNamespace(
                 tool_calls=[
                     SimpleNamespace(
@@ -277,11 +284,12 @@ class LLMClientChatTest(unittest.TestCase):
         tool_messages = [m for m in result.messages if m["role"] == "tool"]
         self.assertEqual(len(tool_messages), 1)
         self.assertIn("工具执行错误", tool_messages[0]["content"])
+        self.assertIn("工具执行错误", result.tool_results[0].value)
 
     def test_chat_unregistered_tool(self) -> None:
         client = LLMClient(api_key="", model="test-model")
 
-        async def fake_create(**kwargs: object) -> SimpleNamespace:  # noqa: ARG001
+        async def fake_create(**_kwargs: object) -> SimpleNamespace:
             message = SimpleNamespace(
                 tool_calls=[
                     SimpleNamespace(
@@ -308,6 +316,8 @@ class LLMClientChatTest(unittest.TestCase):
         result: LLMChatResult = asyncio.run(run())
         tool_messages = [m for m in result.messages if m["role"] == "tool"]
         self.assertEqual(tool_messages[0]["content"], "工具 ghost_tool 未注册")
+        self.assertEqual(result.tool_results[0].name, "ghost_tool")
+        self.assertEqual(result.tool_results[0].value, "工具 ghost_tool 未注册")
 
     def test_chat_invalid_arguments(self) -> None:
         client = LLMClient(api_key="", model="test-model")
@@ -317,7 +327,7 @@ class LLMClientChatTest(unittest.TestCase):
             """翻倍。"""
             return x * 2
 
-        async def fake_create(**kwargs: object) -> SimpleNamespace:  # noqa: ARG001
+        async def fake_create(**_kwargs: object) -> SimpleNamespace:
             message = SimpleNamespace(
                 tool_calls=[
                     SimpleNamespace(
@@ -341,6 +351,7 @@ class LLMClientChatTest(unittest.TestCase):
         result: LLMChatResult = asyncio.run(run())
         tool_messages = [m for m in result.messages if m["role"] == "tool"]
         self.assertEqual(tool_messages[0]["content"], "工具 double 参数格式错误")
+        self.assertEqual(result.tool_results[0].value, "工具 double 参数格式错误")
 
     def test_chat_max_turns_exhausted(self) -> None:
         client = LLMClient(api_key="", model="test-model", max_turns=2)
@@ -376,6 +387,10 @@ class LLMClientChatTest(unittest.TestCase):
         # 耗尽后无最终文本回复，reply 为空但循环已安全终止
         self.assertEqual(result.reply, "")
         self.assertEqual(len(calls), 2)
+        # 每轮工具调用都有原始结果记录
+        self.assertEqual(len(result.tool_results), 2)
+        self.assertEqual(result.tool_results[0].value, "pong")
+        self.assertEqual(result.tool_results[1].value, "pong")
 
 
 if __name__ == "__main__":

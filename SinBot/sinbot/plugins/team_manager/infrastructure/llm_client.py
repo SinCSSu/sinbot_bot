@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, cast
 
 from nonebot import logger
@@ -25,12 +25,22 @@ _PLACEHOLDER_API_KEY = "EMPTY"
 
 
 @dataclass
+class ToolResult:
+    """一次工具调用的执行结果（原始返回值，未字符串化）。"""
+
+    name: str
+    tool_call_id: str
+    value: Any
+
+
+@dataclass
 class LLMChatResult:
     """一次 chat 调用的封装结果。"""
 
     reply: str
     messages: list[ChatCompletionMessageParam]
     tool_call_turns: int
+    tool_results: list[ToolResult] = field(default_factory=list)
 
 
 @dataclass
@@ -113,23 +123,25 @@ class LLMClient:
             for tool in self._tools.values()
         ]
 
-    async def _execute_tool(self, tool_call: ChatCompletionMessageToolCall) -> str:
-        """执行一次工具调用，异常时返回错误信息。"""
-        tool = self._tools.get(tool_call.function.name)
+    async def _execute_tool(self, tool_call: ChatCompletionMessageToolCall) -> Any:
+        """执行一次工具调用，返回原始返回值；失败时返回错误信息字符串。"""
+        # tool_calls 联合类型含无 function 字段的自定义工具，动态访问以兼容
+        function = getattr(tool_call, "function", None)
+        if function is None:
+            return f"工具调用类型不支持: {tool_call.type}"
+        tool = self._tools.get(function.name)
         if tool is None:
-            return f"工具 {tool_call.function.name} 未注册"
+            return f"工具 {function.name} 未注册"
         try:
-            arguments = json.loads(tool_call.function.arguments or "{}")
+            arguments = json.loads(function.arguments or "{}")
             if not isinstance(arguments, dict):
-                return f"工具 {tool_call.function.name} 参数格式错误"
+                return f"工具 {function.name} 参数格式错误"
             if inspect.iscoroutinefunction(tool.func):
-                result = await tool.func(**arguments)
-            else:
-                result = tool.func(**arguments)
+                return await tool.func(**arguments)
+            return tool.func(**arguments)
         except Exception as e:  # noqa: BLE001 - 工具执行失败需兜底回传模型
-            logger.warning(f"工具 {tool_call.function.name} 执行失败: {e}")
+            logger.warning(f"工具 {function.name} 执行失败: {e}")
             return f"工具执行错误: {e}"
-        return str(result)
 
     async def chat(
         self,
@@ -144,11 +156,12 @@ class LLMClient:
             max_turns: 工具调用循环最大轮数，缺省用客户端默认值
 
         Returns:
-            封装结果：最终回复、完整消息历史与工具调用轮数
+            封装结果：最终回复、完整消息历史、工具调用轮数与各工具原始返回值
         """
         turns_limit = max_turns or self.max_turns
         history: list[ChatCompletionMessageParam] = list(messages)
         tool_call_turns = 0
+        tool_results: list[ToolResult] = []
         tools = self._build_tool_params() if self._tools else None
         for _ in range(turns_limit):
             request: dict[str, Any] = {"model": self.model, "messages": history}
@@ -161,12 +174,23 @@ class LLMClient:
                 break
             tool_call_turns += 1
             for tool_call in assistant_message.tool_calls:
-                result = await self._execute_tool(tool_call)
+                function = getattr(tool_call, "function", None)
+                if function is None:
+                    logger.warning(f"忽略不支持的 LLM 工具调用类型: {tool_call.type}")
+                    continue
+                value = await self._execute_tool(tool_call)
+                tool_results.append(
+                    ToolResult(
+                        name=function.name,
+                        tool_call_id=tool_call.id,
+                        value=value,
+                    ),
+                )
                 history.append(
                     {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
-                        "content": result,
+                        "content": str(value),
                     },
                 )
         else:
@@ -178,6 +202,7 @@ class LLMClient:
             reply=_extract_reply(history),
             messages=history,
             tool_call_turns=tool_call_turns,
+            tool_results=tool_results,
         )
 
 
@@ -185,17 +210,22 @@ def _assistant_to_param(message: ChatCompletionMessage) -> ChatCompletionMessage
     """将 SDK 助手消息对象转换为消息参数字典，统一历史为 dict 形态。"""
     param: dict[str, Any] = {"role": "assistant", "content": message.content}
     if message.tool_calls:
-        param["tool_calls"] = [
-            {
-                "id": tool_call.id,
-                "type": tool_call.type,
-                "function": {
-                    "name": tool_call.function.name,
-                    "arguments": tool_call.function.arguments,
+        function_calls: list[dict[str, Any]] = []
+        for tool_call in message.tool_calls:
+            function = getattr(tool_call, "function", None)
+            if function is None:
+                continue
+            function_calls.append(
+                {
+                    "id": tool_call.id,
+                    "type": tool_call.type,
+                    "function": {
+                        "name": function.name,
+                        "arguments": function.arguments,
+                    },
                 },
-            }
-            for tool_call in message.tool_calls
-        ]
+            )
+        param["tool_calls"] = function_calls
     return cast("ChatCompletionMessageParam", param)
 
 

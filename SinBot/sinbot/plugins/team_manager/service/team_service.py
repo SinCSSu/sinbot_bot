@@ -1,13 +1,16 @@
+from json import tool
+
 from nonebot import logger
-from nonebot.adapters.onebot.v11 import GroupMessageEvent
 from nonebot.adapters import Event
+from nonebot.adapters.onebot.v11 import GroupMessageEvent
 from sqlalchemy.exc import NoResultFound
 
+from ..controller import team_controller
 from ..dao import spec_dao
 from ..dao.team_dao import insert_new_team
+from ..infrastructure.llm_client import LLMChatResult
 from ..model.vo.create_team_vo import CreateTeamVo
 from ..utils.date_utils import parse_date_from_input_with_parser
-from ..controller import team_controller
 
 
 # 开团 今晚八点 yx
@@ -41,8 +44,11 @@ async def create_team(message: Event, event: GroupMessageEvent):
             create_team_vo.start_time = team_start_time
             create_team_vo.team_name = command_list[1]
     if not create_team_vo.start_time:
-        create_team_vo = __parse_team_info_with_llm(full_command)  # 无法解析日期，使用llm兜底
-        llm_flag = True
+        create_team_vo = await __parse_team_info_with_llm(full_command)  # 无法解析日期，使用llm兜底
+        if create_team_vo:
+            llm_flag = True
+        else:
+            await team_controller.create_team.finish("输入解析失败。")
 
     if not team_start_time and not create_team_vo:
         await team_controller.create_team.finish("参数输入错误。")
@@ -56,20 +62,34 @@ async def create_team(message: Event, event: GroupMessageEvent):
     if event:
         create_team_vo.group_number = event.group_id
     else:
-        create_team_vo.group_number = '-1'
+        return
 
-    if await insert_new_team(create_team_vo):
-        logger.info(f"创建在{create_team_vo.start_time}的团队{create_team_vo.team_name}成功！")
-        await team_controller.create_team.finish(
-            f"创建在{create_team_vo.start_time}的团队{create_team_vo.team_name}成功！")
+    if create_team_vo:
+        if await insert_new_team(create_team_vo):
+            logger.info(f"创建在{create_team_vo.start_time}的团队{create_team_vo.team_name}成功！")
+            await team_controller.create_team.finish(
+                f"创建在{create_team_vo.start_time}的团队{create_team_vo.team_name}成功！")
+        else:
+            logger.error(f"创建在{create_team_vo.start_time}的团队{create_team_vo.team_name}失败！")
+            await team_controller.create_team.finish(
+                f"数据库内部错误，请联系管理员！")
+
+
+async def __parse_team_info_with_llm(full_commend: str) ->CreateTeamVo|None:
+    from .llm_service import llm_client
+    result = await llm_client.chat([
+        {
+            "role": "system",
+            "content": (
+                "你是一个数据清洗器，负责解析用户输入数据并选择合适的工具返回结构化的数据"
+            ),
+        },
+        {"role": "user", "content": full_commend},
+    ])
+    if len(result.tool_results) > 0:
+        return result.tool_results[0].value
     else:
-        logger.error(f"创建在{create_team_vo.start_time}的团队{create_team_vo.team_name}失败！")
-        await team_controller.create_team.finish(
-            f"数据库内部错误，请联系管理员！")
-
-
-def __parse_team_info_with_llm(full_commend: str) -> CreateTeamVo:
-    pass
+        return None
 
 
 # 报名 1 蓬莱 辰韶

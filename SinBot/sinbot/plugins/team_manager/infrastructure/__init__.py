@@ -3,7 +3,8 @@
 from sinbot.plugins.team_manager.infrastructure.llm_client import (
     LLMChatResult,
     LLMClient,
+    ToolResult,
 )
 from sinbot.plugins.team_manager.infrastructure.schema_builder import build_tool_schema
 
-__all__ = ["LLMChatResult", "LLMClient", "build_tool_schema"]
+__all__ = ["LLMChatResult", "LLMClient", "ToolResult", "build_tool_schema"]

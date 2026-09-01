@@ -10,7 +10,7 @@ from sinbot.plugins.team_manager.model.entity.team import Team
 import short_unique_id
 
 
-async def insert_new_team(team_info: CreateTeamVo):
+async def insert_new_team(team_info: CreateTeamVo) -> bool:
     session = get_session()
     try:
         async with session.begin():

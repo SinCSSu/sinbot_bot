@@ -1,8 +1,7 @@
-from nonebot import load_plugins, require
-from nonebot import get_plugin_config
-from nonebot.plugin import PluginMetadata
 from pathlib import Path
-from nonebot import logger
+
+from nonebot import get_plugin_config, load_plugins, logger, require
+from nonebot.plugin import PluginMetadata
 
 require("nonebot_plugin_orm")
 
@@ -19,7 +18,8 @@ __plugin_meta__ = PluginMetadata(
 
 config = get_plugin_config(Config).team_manager
 
-from .service import (  # noqa: F401  # 副作用导入，注册单例与事件处理器
+from .service import (  # noqa: F401  # 副作用导入：初始化 LLM 单例与事件处理器
     llm_service,
     team_service,
 )
+from .service.llm_tools import team_tools  # noqa: F401  # 副作用导入：注册 LLM 工具
