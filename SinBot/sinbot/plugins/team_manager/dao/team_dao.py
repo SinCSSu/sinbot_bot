@@ -1,37 +1,53 @@
 import datetime
-from nonebot import logger
 from datetime import timedelta
 
-from nonebot_plugin_orm import get_session
-
-from sinbot.plugins.team_manager.model.vo.create_team_vo import CreateTeamVo
-from sinbot.plugins.team_manager.model.entity.team import Team
-
 import short_unique_id
+from nonebot import logger
+from nonebot_plugin_orm import get_session
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+
+from sinbot.plugins.team_manager.model.entity.team import Team
+from sinbot.plugins.team_manager.model.vo.create_team_vo import CreateTeamVo
 
 
 async def insert_new_team(team_info: CreateTeamVo) -> bool:
-    session = get_session()
-    try:
-        async with session.begin():
-            team = Team(
-                team_id=str(short_unique_id.get_next_snowflake_id()),
-                team_name=team_info.team_name,
-                dungeon=team_info.team_name,
-                comment=team_info.comment,
-                group_number=team_info.group_number,
-                start_time=datetime.datetime.strptime(team_info.start_time, "%Y-%m-%d %H:%M:%S"),
-                overtime_time=datetime.datetime.strptime(team_info.start_time, "%Y-%m-%d %H:%M:%S") + timedelta(
-                    hours=3),
-                limit_method=team_info.limit_method,
-                delete_flag='N',
-                created_by=team_info.create_by,
-                creation_date=datetime.datetime.now(),
-                last_update_by=team_info.create_by,
-                last_update_date=datetime.datetime.now()
-            )
-            session.add(team)
-            return True
-    except Exception as e:
-        logger.error(e)
+    if team_info.start_time is None:
+        logger.error(f"创建团队失败：start_time 为空，输入={team_info}")
         return False
+    start_dt = team_info.start_time
+    try:
+        now = datetime.datetime.now()  # noqa: DTZ005 - DB 无时区列，naive 一致
+        team = Team(
+            team_id=str(short_unique_id.get_next_snowflake_id()),
+            team_name=team_info.team_name,
+            dungeon=team_info.team_name,
+            comment=team_info.comment,
+            group_number=team_info.group_number,
+            start_time=start_dt,
+            overtime_time=start_dt + timedelta(hours=3),
+            limit_method=team_info.limit_method,
+            delete_flag="N",
+            created_by=team_info.create_by,
+            creation_date=now,
+            last_update_by=team_info.create_by,
+            last_update_date=now,
+        )
+        async with get_session() as session, session.begin():
+            session.add(team)
+    except SQLAlchemyError:
+        logger.exception("创建团队失败：数据库操作异常")
+        return False
+    return True
+
+
+async def get_available_team_by_group_id(group_id: str) -> list[Team]:
+    async with get_session() as session:
+        result = await session.execute(
+            select(Team).where(
+                Team.group_number == group_id,
+                Team.delete_flag == "N",
+                Team.start_time > datetime.datetime.now(),  # noqa: DTZ005 - DB 无时区列
+            )
+        )
+        return list(result.scalars().all())

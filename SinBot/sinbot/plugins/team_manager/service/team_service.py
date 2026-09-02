@@ -7,10 +7,11 @@ from sqlalchemy.exc import NoResultFound
 
 from ..controller import team_controller
 from ..dao import spec_dao
-from ..dao.team_dao import insert_new_team
+from ..dao.team_dao import insert_new_team, get_available_team_by_group_id
 from ..infrastructure.llm_client import LLMChatResult
+from ..model.entity.team import Team
 from ..model.vo.create_team_vo import CreateTeamVo
-from ..utils.date_utils import parse_date_from_input_with_parser
+from ..utils.date_utils import is_hour_specific, parse_date_from_input_with_parser
 
 
 # 开团 今晚八点 yx
@@ -33,6 +34,10 @@ async def create_team(message: Event, event: GroupMessageEvent):
         limit_flag = False
         command_list.remove("无限制")
 
+    if not is_hour_specific(command_list[1]) or not is_hour_specific(command_list[2]) :
+        await team_controller.create_team.finish(
+            "请输入时间"
+        )
     # 防止记不清时间和副本名的顺序，适配了两种方式
     if team_start_time := parse_date_from_input_with_parser(command_list[1]):
         create_team_vo.start_time = team_start_time
@@ -44,7 +49,7 @@ async def create_team(message: Event, event: GroupMessageEvent):
             create_team_vo.start_time = team_start_time
             create_team_vo.team_name = command_list[1]
     if not create_team_vo.start_time:
-        create_team_vo = await __parse_team_info_with_llm(full_command)  # 无法解析日期，使用llm兜底
+        create_team_vo = await _parse_team_info_with_llm(full_command)  # 无法解析日期，使用llm兜底
         if create_team_vo:
             llm_flag = True
         else:
@@ -75,7 +80,7 @@ async def create_team(message: Event, event: GroupMessageEvent):
                 f"数据库内部错误，请联系管理员！")
 
 
-async def __parse_team_info_with_llm(full_commend: str) ->CreateTeamVo|None:
+async def _parse_team_info_with_llm(full_commend: str) ->CreateTeamVo|None:
     from .llm_service import llm_client
     result = await llm_client.chat([
         {
@@ -94,6 +99,8 @@ async def __parse_team_info_with_llm(full_commend: str) ->CreateTeamVo|None:
 
 # 报名 1 蓬莱 辰韶
 # 报名 1 蓬莱 辰韶 1
+# 报名 yx 蓬莱 辰韶
+# 报名 蓬莱 辰韶 // 开团需要名称需要添加校验 不能使用门派名称
 
 @team_controller.join_team.handle()
 async def join_team(message: Event, event: GroupMessageEvent):
@@ -105,11 +112,17 @@ async def join_team(message: Event, event: GroupMessageEvent):
     if len(command_list) < 3:
         await team_controller.join_team.finish("参数过少！")
 
-    available_team_list = __get_available_team_list(str(event.group_id))
+    available_team_list = await _get_available_team_list(str(event.group_id))
 
-    # if available_team_list
-    #
-    # if not command_list[1].isdecimal():
+    if available_team_list:
+        if command_list[1].isdecimal(): # demo 1 2
+            pass
+        elif command_list[1] in [ team.team_name for team in available_team_list ]: # demo 3
+            pass
+        elif not await spec_dao.get_spec_id_by_name_or_nickname(command_list[1]): # 既不是 团队id 又不是团队名称 又不是门派名称
+            pass
+        else: # demo 4
+            pass
 
 
 
@@ -121,7 +134,6 @@ async def join_team(message: Event, event: GroupMessageEvent):
 
     await team_controller.join_team.finish("test")
 
-async def __get_available_team_list(group_number:str)->list:
-    pass
-
+async def _get_available_team_list(group_number:str)->list:
+    return await get_available_team_by_group_id(group_number)
 
