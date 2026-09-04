@@ -11,6 +11,7 @@ from ..dao.team_dao import insert_new_team, get_available_team_by_group_id
 from ..infrastructure.llm_client import LLMChatResult
 from ..model.entity.team import Team
 from ..model.vo.create_team_vo import CreateTeamVo
+from ..model.vo.join_team_vo import JoinTeamVo
 from ..utils.date_utils import is_hour_specific, parse_date_from_input_with_parser
 
 
@@ -113,16 +114,41 @@ async def join_team(message: Event, event: GroupMessageEvent):
         await team_controller.join_team.finish("参数过少！")
 
     available_team_list = await _get_available_team_list(str(event.group_id))
+    join_team_vo = JoinTeamVo()
+    default_team_flag = False
 
     if available_team_list:
         if command_list[1].isdecimal(): # demo 1 2
-            pass
+            if int(command_list[1]) > len(available_team_list) or  int(command_list[1]) <= 0 :
+                await team_controller.join_team.finish("请输入正确的团队序号！")
+            join_team_vo.team_no = command_list[1]
+            join_team_vo.team_id = available_team_list[int(join_team_vo.team_no) - 1].team_id
+            join_team_vo.member_spec_input = command_list[2]
+            join_team_vo.member_name = command_list[3]
         elif command_list[1] in [ team.team_name for team in available_team_list ]: # demo 3
-            pass
-        elif not await spec_dao.get_spec_id_by_name_or_nickname(command_list[1]): # 既不是 团队id 又不是团队名称 又不是门派名称
-            pass
-        else: # demo 4
-            pass
+            join_team_vo.team_name = command_list[1]
+            join_team_vo.team_id = next((x.team_id for x in available_team_list if x.team_name == join_team_vo.team_name),None)
+            join_team_vo.member_spec_input = command_list[2]
+            join_team_vo.member_name = command_list[3]
+        else: # demo 4?
+            if len(available_team_list) > 1:
+                await team_controller.join_team.finish("请输入团队名或团队序号")
+            join_team_vo.team_name = available_team_list[0].team_name
+            join_team_vo.team_id = available_team_list[0].team_id
+            join_team_vo.member_spec_input = command_list[2]
+            join_team_vo.member_name = command_list[3]
+
+        join_team_vo.member_spec = await spec_dao.get_spec_id_by_name_or_nickname(join_team_vo.member_spec_input)
+        if  join_team_vo.member_spec == -1:
+            await team_controller.join_team.finish("请输入正确的心法名称！")
+        else:
+            join_team_vo.group_number = str(event.group_id)
+            join_team_vo.member_id = str(event.sender.user_id)
+
+
+
+
+
 
 
 
@@ -134,6 +160,6 @@ async def join_team(message: Event, event: GroupMessageEvent):
 
     await team_controller.join_team.finish("test")
 
-async def _get_available_team_list(group_number:str)->list:
+async def _get_available_team_list(group_number:str)->list[Team]:
     return await get_available_team_by_group_id(group_number)
 
