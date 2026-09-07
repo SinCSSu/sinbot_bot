@@ -12,6 +12,11 @@ dependencies = [
     "datetime>=6.0",
     "require>=0.1.1",
     "openai>=3.6.0",
+    "aiosqlite>=0.22.1",
+    "jionlp>=1.5.29",
+    "nb-cli==1.7.4",
+    "openai>=3.6.0",
+    "short-unique-id>=0.3.0",
 ]
 
 [project.optional-dependencies]
