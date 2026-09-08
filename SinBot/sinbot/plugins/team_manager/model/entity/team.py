@@ -13,7 +13,7 @@ class Team(Model):
     comment: Mapped[str] = mapped_column(VARCHAR(500), nullable=True)
     start_time: Mapped[datetime.datetime] = mapped_column(DATETIME, nullable=False)
     overtime_time: Mapped[datetime.datetime] = mapped_column(DATETIME, nullable=False)
-    limit_method: Mapped[str] = mapped_column(TEXT, nullable=True)
+    limit_method: Mapped[str] = mapped_column(BIGINT, nullable=True)
     delete_flag: Mapped[str] = mapped_column(VARCHAR(1), nullable=False)
     created_by: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     creation_date: Mapped[datetime.datetime] = mapped_column(DATETIME, nullable=False)
