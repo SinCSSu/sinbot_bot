@@ -8,6 +8,7 @@ from sqlalchemy.exc import NoResultFound
 from ..controller import team_controller
 from ..dao import spec_dao
 from ..dao.team_dao import insert_new_team, get_available_team_by_group_id
+from ..dao.member_dao import test
 from ..infrastructure.llm_client import LLMChatResult
 from ..model.entity.team import Team
 from ..model.vo.create_team_vo import CreateTeamVo
