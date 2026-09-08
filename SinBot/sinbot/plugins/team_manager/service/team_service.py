@@ -8,7 +8,7 @@ from sqlalchemy.exc import NoResultFound
 from ..controller import team_controller
 from ..dao import spec_dao
 from ..dao.team_dao import insert_new_team, get_available_team_by_group_id
-from ..dao.member_dao import test
+from ..dao.member_dao import insert_new_member
 from ..infrastructure.llm_client import LLMChatResult
 from ..model.entity.team import Team
 from ..model.vo.create_team_vo import CreateTeamVo
@@ -36,7 +36,7 @@ async def create_team(message: Event, event: GroupMessageEvent):
         limit_flag = False
         command_list.remove("无限制")
 
-    if not is_hour_specific(command_list[1]) and not is_hour_specific(command_list[2]) :
+    if not is_hour_specific(command_list[1]) and not is_hour_specific(command_list[2]):
         await team_controller.create_team.finish(
             "请输入时间"
         )
@@ -82,7 +82,7 @@ async def create_team(message: Event, event: GroupMessageEvent):
                 f"数据库内部错误，请联系管理员！")
 
 
-async def _parse_team_info_with_llm(full_commend: str) ->CreateTeamVo|None:
+async def _parse_team_info_with_llm(full_commend: str) -> CreateTeamVo | None:
     from .llm_service import llm_client
     result = await llm_client.chat([
         {
@@ -145,10 +145,9 @@ async def join_team(message: Event, event: GroupMessageEvent):
                                     None)
         join_info_list = join_info_list[1:]
     else:
-        if len(available_team_list) == 1:
-            join_team_vo.team_id = available_team_list[0].team_id
-        else:
-            await team_controller.join_team.finish("当前有多支在开团队，请选择你要加入团队！")
+        await team_controller.join_team.finish("请选择正确的团队序号或者名称")
+        # todo
+        # 发送团队列表
 
     join_team_vo.member_name = join_info_list[0]
     join_info_list = join_info_list[1:]
@@ -173,7 +172,7 @@ async def join_team(message: Event, event: GroupMessageEvent):
 
     if mult_spec:
         try:
-            sub_spec_name,sub_spec_id = await spec_dao.get_mult_spec_id_by_main_id(join_team_vo.member_spec)
+            sub_spec_name, sub_spec_id = await spec_dao.get_mult_spec_id_by_main_id(join_team_vo.member_spec)
             if sub_spec_id:
                 join_team_vo.sub_spec = sub_spec_id
             else:
@@ -184,10 +183,13 @@ async def join_team(message: Event, event: GroupMessageEvent):
 
     join_team_vo.member_id = str(event.sender.user_id)
     join_team_vo.group_number = str(event.group_id)
+    join_team_vo.sender = str(event.sender.user_id)
 
-    await team_controller.join_team.finish(str(join_team_vo))
+    if await insert_new_member(join_team_vo):
+        await team_controller.join_team.finish("报名成功！")
+    else:
+        await team_controller.join_team.finish("数据库错误！")
 
 
-async def _get_available_team_list(group_number:str)->list[Team]:
+async def _get_available_team_list(group_number: str) -> list[Team]:
     return await get_available_team_by_group_id(group_number)
-

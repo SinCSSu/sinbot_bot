@@ -15,7 +15,6 @@ dependencies = [
     "aiosqlite>=0.22.1",
     "jionlp>=1.5.29",
     "nb-cli==1.7.4",
-    "openai>=3.6.0",
 ]
 
 [project.optional-dependencies]
