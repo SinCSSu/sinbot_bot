@@ -10,7 +10,7 @@ class JoinTeamVo:
         self.member_name: str | None = None
         self.member_spec: int | None = None
         self.member_spec_input :str | None= None
-        self.mult_spec:bool | None = None
+        self.sub_spec:int | None = None
         self.group_number : str | None = None
         self.member_id : str | None = None
 

@@ -145,7 +145,7 @@ async def join_team(message: Event, event: GroupMessageEvent):
             join_team_vo.group_number = str(event.group_id)
             join_team_vo.member_id = str(event.sender.user_id)
             if command_list[-1].isdecimal():
-                join_team_vo.mult_spec = True
+                join_team_vo.sub_spec = -1
 
 
 
