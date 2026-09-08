@@ -21,6 +21,7 @@ async def get_mult_spec_id_by_main_id(spec_id:int)->tuple[str,int|None]:
     spec = select(Specialization).where(Specialization.delete_flag == 'N').where(Specialization.spec_id == spec_id)
     result =  await session.execute(spec)
     if result:
-            return result.scalars().one().spec_name,result.scalars().one().spec_id
+        spec = result.scalars().one()
+        return spec.spec_name,spec.relate_spec_id
     else:
-        return -1
+        raise NoResultFound

@@ -127,21 +127,22 @@ async def join_team(message: Event, event: GroupMessageEvent):
     if not available_team_list:
         await team_controller.join_team.finish("当前没有在开团队！")
 
-    join_info_list = command_list[1:-1]
+    join_info_list = command_list[1:]
+
     if join_info_list[-1].isdecimal():
         if int(command_list[-1]) == 1:
             mult_spec = True
-        join_info_list = join_info_list[0:-2]
+        join_info_list = join_info_list[:-1]
 
     if join_info_list[0].isdecimal():
         if int(join_info_list[0]) > len(available_team_list) or int(join_info_list[0]) <= 0:
             await team_controller.join_team.finish("请输入正确的团队序号！")
         join_team_vo.team_id = available_team_list[int(join_info_list[0]) - 1].team_id
-        join_info_list = join_info_list[1:-1]
+        join_info_list = join_info_list[1:]
     elif join_info_list[0] in [team.team_name for team in available_team_list]:
         join_team_vo.team_id = next((x.team_id for x in available_team_list if x.team_name == join_info_list[0]),
                                     None)
-        join_info_list = join_info_list[1:-1]
+        join_info_list = join_info_list[1:]
     else:
         if len(available_team_list) == 1:
             join_team_vo.team_id = available_team_list[0].team_id
@@ -149,9 +150,9 @@ async def join_team(message: Event, event: GroupMessageEvent):
             await team_controller.join_team.finish("当前有多支在开团队，请选择你要加入团队！")
 
     join_team_vo.member_name = join_info_list[0]
-    join_info_list = join_info_list[1:-1]
+    join_info_list = join_info_list[1:]
 
-    if (mult_spec == -1 and len(join_info_list) > 1) or (len(join_info_list) > 2):
+    if (mult_spec and len(join_info_list) > 1) or (len(join_info_list) > 2):
         await team_controller.join_team.finish("你选择的心法太多了！")
 
     try:
@@ -164,18 +165,18 @@ async def join_team(message: Event, event: GroupMessageEvent):
     if len(join_info_list) == 2:
         try:
             sub_spec_id = await spec_dao.get_spec_id_by_name_or_nickname(join_info_list[1])
-            join_team_vo.member_spec = sub_spec_id
+            join_team_vo.sub_spec = sub_spec_id
         except NoResultFound as e:
             logger.error(f"双修查询心法返回空:{join_info_list[1]}")
             await team_controller.join_team.finish("请输入正确的双修心法名称！")
 
-    elif mult_spec:
+    if mult_spec:
         try:
             sub_spec_name,sub_spec_id = await spec_dao.get_mult_spec_id_by_main_id(join_team_vo.member_spec)
             if sub_spec_id:
                 join_team_vo.sub_spec = sub_spec_id
             else:
-                await  team_controller.join_team.finish(f"你一个{sub_spec_name}想切甚么！")
+                await  team_controller.join_team.finish(f"你一个{join_info_list[0]}想切甚么！")
         except NoResultFound as e:
             logger.error(f"双修查询心法返回空:{join_info_list[1]}")
             await team_controller.join_team.finish("数据错误！")
