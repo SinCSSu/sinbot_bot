@@ -1,5 +1,6 @@
 from sinbot.plugins.team_manager.model.vo.create_team_vo import CreateTeamVo
 from sinbot.plugins.team_manager.service.llm_service import llm_client
+from sinbot.plugins.team_manager.utils.date_utils import parse_datetime_str
 
 
 @llm_client.register()
@@ -86,6 +87,6 @@ def create_team_by_llm(
     create_team_vo = CreateTeamVo()
     create_team_vo.team_name = team_name
     create_team_vo.comment = comment
-    create_team_vo.start_time = start_time
+    create_team_vo.start_time = parse_datetime_str(start_time)
     create_team_vo.limit_method = limit
     return create_team_vo

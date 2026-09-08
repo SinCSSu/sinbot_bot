@@ -1,12 +1,12 @@
 import datetime
 
 from nonebot_plugin_orm import Model
-from sqlalchemy import INTEGER, VARCHAR, DATETIME, TEXT
+from sqlalchemy import BIGINT, DATETIME, TEXT, VARCHAR
 from sqlalchemy.orm import Mapped, mapped_column
 
 
 class Team(Model):
-    team_id: Mapped[str] = mapped_column(TEXT, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BIGINT, primary_key=True)
     team_name: Mapped[str] = mapped_column(VARCHAR(300), nullable=False)
     group_number: Mapped[str] = mapped_column(VARCHAR(300), nullable=False)
     dungeon: Mapped[str] = mapped_column(VARCHAR(300), nullable=False)

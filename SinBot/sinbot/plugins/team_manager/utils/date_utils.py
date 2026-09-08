@@ -27,3 +27,16 @@ def parse_date_from_input_with_parser(date_str: str) -> datetime | None:
     except ValueError:
         return None
     return time
+
+
+def parse_datetime_str(value: str | None) -> datetime | None:
+    """将约定格式（YYYY-MM-DD HH:MM[:SS]，兼容 T 分隔）的字符串解析为 datetime，失败返回 None。"""
+    if not value:
+        return None
+    text = value.strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    return None

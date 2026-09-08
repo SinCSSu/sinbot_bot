@@ -1,7 +1,6 @@
 import datetime
 from datetime import timedelta
 
-import short_unique_id
 from nonebot import logger
 from nonebot_plugin_orm import get_session
 from sqlalchemy import select
@@ -9,17 +8,24 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from sinbot.plugins.team_manager.model.entity.team import Team
 from sinbot.plugins.team_manager.model.vo.create_team_vo import CreateTeamVo
+from sinbot.plugins.team_manager.utils.date_utils import parse_datetime_str
+from sinbot.plugins.team_manager.utils.ids import next_id
 
 
 async def insert_new_team(team_info: CreateTeamVo) -> bool:
-    if team_info.start_time is None:
+    start_dt = team_info.start_time
+    if start_dt is None:
         logger.error(f"创建团队失败：start_time 为空，输入={team_info}")
         return False
-    start_dt = team_info.start_time
+    if isinstance(start_dt, str):  # 兼容上游误传字符串的入口，归一为 datetime
+        start_dt = parse_datetime_str(start_dt)
+        if start_dt is None:
+            logger.error(f"创建团队失败：start_time 格式无法解析，输入={team_info}")
+            return False
     try:
         now = datetime.datetime.now()  # noqa: DTZ005 - DB 无时区列，naive 一致
         team = Team(
-            team_id=str(short_unique_id.get_next_snowflake_id()),
+            team_id=next_id(),
             team_name=team_info.team_name,
             dungeon=team_info.team_name,
             comment=team_info.comment,

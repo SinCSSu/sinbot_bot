@@ -35,7 +35,7 @@ async def create_team(message: Event, event: GroupMessageEvent):
         limit_flag = False
         command_list.remove("无限制")
 
-    if not is_hour_specific(command_list[1]) or not is_hour_specific(command_list[2]) :
+    if not is_hour_specific(command_list[1]) and not is_hour_specific(command_list[2]) :
         await team_controller.create_team.finish(
             "请输入时间"
         )
