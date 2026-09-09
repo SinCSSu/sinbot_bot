@@ -150,7 +150,7 @@ async def send_team_list_to_group(matcher:Matcher,team_info:list[Team]):
     content = "当前所有在开团队如下：\n"
     for index,team in enumerate(team_info):
         start_time = format_datatime_str(team.start_time)
-        temp = f"{index + 1}. {start_time},团队名称：{team.team_name}\n"
+        temp = f"{index + 1}： {start_time},团队名称：{team.team_name}\n"
         content += temp
     content = content[:-1]
     await matcher.send(content)
