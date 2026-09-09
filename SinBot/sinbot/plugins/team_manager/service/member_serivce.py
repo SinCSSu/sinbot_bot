@@ -26,6 +26,8 @@ from ..utils.date_utils import is_hour_specific, parse_date_from_input_with_pars
 # [0]是合法团队时 移除[0] 此时[0] 一定是id,判断[1]和可能有的2是否是心法，不是返回报错 另 双修标识和[2]冲突
 # 是的话 团队+心法+id+双修信息完备，报团
 
+#todo 缺少 重复报团校验，缺少团队限制校验
+
 @member_controller.join_team.handle()
 async def join_team(message: Event, event: GroupMessageEvent):
     logger.info("加入团队")
