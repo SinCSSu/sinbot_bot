@@ -1,7 +1,7 @@
 import datetime
 
 from nonebot_plugin_orm import Model
-from sqlalchemy import BIGINT, DATETIME, TEXT, VARCHAR
+from sqlalchemy import BIGINT, DATETIME, TEXT, VARCHAR,INTEGER
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -14,6 +14,8 @@ class Team(Model):
     start_time: Mapped[datetime.datetime] = mapped_column(DATETIME, nullable=False)
     overtime_time: Mapped[datetime.datetime] = mapped_column(DATETIME, nullable=False)
     limit_method: Mapped[str] = mapped_column(BIGINT, nullable=True)
+    locker : Mapped[str] = mapped_column(VARCHAR(100),nullable=True)
+    salary : Mapped[int] = mapped_column(INTEGER,nullable= True)
     delete_flag: Mapped[str] = mapped_column(VARCHAR(1), nullable=False)
     created_by: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     creation_date: Mapped[datetime.datetime] = mapped_column(DATETIME, nullable=False)

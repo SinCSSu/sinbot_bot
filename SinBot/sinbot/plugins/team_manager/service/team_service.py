@@ -2,7 +2,7 @@ from json import tool
 
 from nonebot import logger
 from nonebot.adapters import Event
-from nonebot.adapters.onebot.v11 import GroupMessageEvent
+from nonebot.adapters.onebot.v11 import GroupMessageEvent,MessageSegment
 from nonebot.internal.matcher import Matcher
 from sqlalchemy.exc import NoResultFound
 
@@ -14,6 +14,7 @@ from ..infrastructure.llm_client import LLMChatResult
 from ..model.entity.team import Team
 from ..model.vo.create_team_vo import CreateTeamVo
 from ..model.vo.join_team_vo import JoinTeamVo
+from ..render import render_team_panel_for_team
 from ..utils.date_utils import is_hour_specific, parse_date_from_input_with_parser, format_datatime_str
 
 
@@ -142,7 +143,9 @@ async def view_team(message: Event, event: GroupMessageEvent):
         else:
             await team_controller.view_team.finish("请输入正确的团队名称！")
 
-    #todo 渲染团队报名面板
+    team_index = team_list.index(team_info) + 1
+    image_bytes = await render_team_panel_for_team(team_info, team_no=team_index)
+    await team_controller.view_team.finish(MessageSegment.image(file=image_bytes))
 
 
 

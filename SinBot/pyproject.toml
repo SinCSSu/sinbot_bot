@@ -9,6 +9,7 @@ dependencies = [
     "nonebot-adapter-onebot>=2.4.6",
     "nonebot-adapter-qq>=1.7.2",
     "nonebot-plugin-orm>=0.8.3",
+    "pillow>=10.0.0",
     "datetime>=6.0",
     "require>=0.1.1",
     "openai>=3.6.0",
