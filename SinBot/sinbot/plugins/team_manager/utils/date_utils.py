@@ -40,3 +40,18 @@ def parse_datetime_str(value: str | None) -> datetime | None:
         except ValueError:
             continue
     return None
+
+_WEEKDAY_CN = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
+
+
+def format_datatime_str(value: datetime | None) -> str | None:
+    """中文友好时间格式，如：9月14日 星期一 晚上8:30；value 为 None 时返回 None。"""
+    if value is None:
+        return None
+    hour = value.hour
+    period = "凌晨" if hour < 6 else "上午" if hour < 12 else "下午" if hour < 18 else "晚上"
+    hour12 = hour % 12 or 12
+    return (
+        f"{value.month}月{value.day}日 {_WEEKDAY_CN[value.weekday()]} "
+        f"{period}{hour12}:{value.minute:02d}"
+    )
