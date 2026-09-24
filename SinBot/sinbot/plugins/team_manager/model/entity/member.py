@@ -11,7 +11,7 @@ class Member(Model):
     member_qq_number: Mapped[str] = mapped_column(VARCHAR(50), nullable=False)
     member_name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
     specialization: Mapped[int] = mapped_column(BIGINT, nullable=False)
-    sub_spec: Mapped[int] = mapped_column(BIGINT, nullable=False)
+    sub_spec: Mapped[int] = mapped_column(BIGINT, nullable=True)
     delete_flag: Mapped[str] = mapped_column(VARCHAR(1), nullable=False)
     creation_date: Mapped[datetime.datetime] = mapped_column(DATETIME, nullable=False)
     created_by: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)

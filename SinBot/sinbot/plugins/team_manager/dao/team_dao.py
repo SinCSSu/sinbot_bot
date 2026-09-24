@@ -10,41 +10,21 @@ from sinbot.plugins.team_manager.model.entity.team import Team
 from sinbot.plugins.team_manager.model.vo.create_team_vo import CreateTeamVo
 from sinbot.plugins.team_manager.utils.date_utils import parse_datetime_str
 from sinbot.plugins.team_manager.utils.ids import next_id
-
+from ..api import get_api_client
+from ..api.codec import to_entities, to_payload
 
 async def insert_new_team(team_info: CreateTeamVo) -> bool:
-    start_dt = team_info.start_time
-    if start_dt is None:
-        logger.error(f"创建团队失败：start_time 为空，输入={team_info}")
-        return False
-    if isinstance(start_dt, str):  # 兼容上游误传字符串的入口，归一为 datetime
-        start_dt = parse_datetime_str(start_dt)
-        if start_dt is None:
-            logger.error(f"创建团队失败：start_time 格式无法解析，输入={team_info}")
-            return False
-    try:
-        now = datetime.datetime.now()  # noqa: DTZ005 - DB 无时区列，naive 一致
-        team = Team(
-            team_id=next_id(),
-            team_name=team_info.team_name,
-            dungeon=team_info.team_name,
-            comment=team_info.comment,
-            group_number=team_info.group_number,
-            start_time=start_dt,
-            overtime_time=start_dt + timedelta(hours=3),
-            limit_method=team_info.limit_method,
-            delete_flag="N",
-            created_by=team_info.create_by,
-            creation_date=now,
-            last_update_by=team_info.create_by,
-            last_update_date=now,
-        )
-        async with get_session() as session, session.begin():
-            session.add(team)
-    except SQLAlchemyError:
-        logger.exception("创建团队失败：数据库操作异常")
-        return False
+    body = to_payload(team_info,datetime_format="%Y-%m-%d %H:%M:%S")
+
+    payload = await get_api_client().request("team.create",
+                                             json=body,
+                                             headers={
+                                                 "X-Group-Number":str(team_info.group_number),
+                                                 "X-Operator-Qq":str(team_info.created_by)
+                                             }
+                                             )
     return True
+
 
 
 async def get_available_team_by_group_id(group_id: str) -> list[Team]:

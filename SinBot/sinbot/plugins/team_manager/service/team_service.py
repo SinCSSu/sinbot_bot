@@ -67,11 +67,12 @@ async def create_team(message: Event, event: GroupMessageEvent):
         if len(command_list) == 4:
             create_team_vo.comment = command_list[-1]
 
-    create_team_vo.create_by = message.get_user_id()
+    create_team_vo.created_by = str(message.get_user_id())
     if event:
-        create_team_vo.group_number = event.group_id
+        create_team_vo.group_number = str(event.group_id)
     else:
         return
+    create_team_vo.dungeon = create_team_vo.team_name
 
     if create_team_vo:
         if await insert_new_team(create_team_vo):
