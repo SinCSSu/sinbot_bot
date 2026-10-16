@@ -17,6 +17,8 @@ dependencies = [
     "aiosqlite>=0.22.1",
     "jionlp>=1.5.29",
     "nb-cli==1.7.4",
+    "jmcomic>=2.7.9",
+    "img2pdf",
 ]
 [tool.nonebot]
 plugin_dirs = ["sinbot/plugins"]
