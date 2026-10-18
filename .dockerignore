@@ -1,0 +1,40 @@
+# 版本控制与 CI
+.git
+.gitignore
+.github
+
+# Python 缓存与虚拟环境（镜像内会重新生成）
+**/__pycache__/
+**/*.py[cod]
+.venv
+venv
+*.egg-info
+
+# 本地引导配置：含 Nacos 账号等敏感信息，运行时由 env_file 注入，禁止进镜像
+SinBot/.env
+SinBot/.env.*
+.env.deploy
+.env.deploy.*
+
+# 本地数据库与运行期产物
+SinBot/sinbot.db
+SinBot/sinbot.db-journal
+SinBot/sinbot.db-wal
+SinBot/sinbot.db-shm
+SinBot/sinbot/plugins/jm_download/download_path/*
+!SinBot/sinbot/plugins/jm_download/download_path/.gitkeep
+
+# 测试代码与误建目录
+SinBot/sinbot/test/
+SinBot/下/
+
+# 容器化文件自身
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 编辑器 / 系统杂项
+.idea
+.vscode
+.DS_Store
+Thumbs.db

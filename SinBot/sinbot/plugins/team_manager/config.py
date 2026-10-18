@@ -2,9 +2,12 @@ from pydantic import BaseModel
 
 
 class ScopedConfig(BaseModel):
+    # 注意：以下字段全部由 Nacos 下发（sinbot-team-manager.properties），
+    # 通过 TEAM_MANAGER__<字段名> 环境变量注入，本地 .env 不再维护。
+
     # OpenAI 兼容接口地址，留空则使用 OpenAI 官方地址
     llm_base_url: str = ""
-    # API Key，留空时使用占位符构造（需在 .env 配置 team_manager__llm_api_key）
+    # API Key，留空时使用占位符构造（在 Nacos 配置 team_manager__llm_api_key）
     llm_api_key: str = ""
     # 默认对话模型名
     llm_model: str = "gpt-4o-mini"
@@ -14,7 +17,7 @@ class ScopedConfig(BaseModel):
     # ---------- 外部 API（数据持久化后端）----------
     # 后端根地址，例如 https://api.example.com；留空时所有调用直接失败
     api_base_url: str = ""
-    # 静态 API Key（建议在 .env.dev 配置 team_manager__api_key）
+    # 静态 API Key（在 Nacos 配置 team_manager__api_key）
     api_key: str = ""
     # 携带 API Key 的请求头名
     api_key_header: str = "X-API-Key"

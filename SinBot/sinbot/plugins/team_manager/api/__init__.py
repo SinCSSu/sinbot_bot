@@ -76,7 +76,7 @@ def init_api_client(config: object | None = None) -> ApiClient:
 
     _client = ApiClient(
         base_url=base_url,
-        api_key=getattr(config, "api_key", "") or "",
+        api_key=getattr(config, "api_keys", "") or "",
         api_key_header=getattr(config, "api_key_header", "") or "X-API-Key",
         timeout=float(getattr(config, "api_timeout", 10.0)),
         max_retries=int(getattr(config, "api_max_retries", 2)),

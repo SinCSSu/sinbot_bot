@@ -19,6 +19,15 @@ dependencies = [
     "nb-cli==1.7.4",
     "jmcomic>=2.7.9",
     "img2pdf",
+    # nacos-sdk-python 3.x（v3 世代）：async + gRPC 架构，包名为 `v2.nacos`，
+    # 协程入口 NacosConfigService.create_config_service / get_config / shutdown。
+    # 硬性要求：
+    #   · Nacos 服务端 >= 3.x（AI Client 相关功能需 3.1.0+）；
+    #   · gRPC 端口 = HTTP 端口 + port_offset(默认 1000)，即 8848 -> 9848 必须可达。
+    # 不要降到 <2.0.0：1.x 及以下是 `from nacos import NacosClient` 的经典同步
+    # 实现，与 sinbot/nacos_config.py 现有的 async 写法完全不兼容。
+    # 另：3.0.0/3.0.1/3.0.2 已被官方 yank（Agent 注册断连后无法重新注册），需 >=3.0.3。
+    "nacos-sdk-python>=3.2.0",
 ]
 [tool.nonebot]
 plugin_dirs = ["sinbot/plugins"]

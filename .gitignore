@@ -115,7 +115,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-.env.dev
+.env
+!.env.example
 .idea/
 .codebuddy/
 
@@ -142,5 +143,8 @@ dmypy.json
 .pytype/
 
 SinBot/sinbot.db
+
+# Docker 部署用的本地引导配置（含 Nacos 凭据），模板 .env.deploy.example 需提交
+.env.deploy
 
 # End of https://www.toptal.com/developers/gitignore/api/python

@@ -3,6 +3,11 @@ from nonebot.adapters.onebot.v11 import Adapter as OnbotV11Adapter  # 避免重�
 from sqlalchemy.sql.ddl import CreateTable
 from pathlib import Path
 
+from sinbot.nacos_config import load_nacos_config
+
+# 必须早于 nonebot.init()：DRIVER / LOG_LEVEL / SQLALCHEMY_DATABASE_URL 在 init 阶段固化，
+# team_manager 插件在导入时就会读取 TEAM_MANAGER__* 并构造 LLMClient。
+load_nacos_config()
 
 nonebot.init()
 # 注册适配器
