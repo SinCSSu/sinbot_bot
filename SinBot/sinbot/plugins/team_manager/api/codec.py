@@ -3,6 +3,7 @@
 dao 改造时用它做最后一公里，保证 ``service`` / ``render`` 拿到的还是原来的
 ``Team`` / ``Member`` / ``Specialization`` 对象，上层零改动::
 
+    # 声明式接口下这两步由 binding.BoundApi 自动完成，一般不用手写
     payload = await api_client.request("member.list_by_team", team_id=team_id)
     members = to_entities(Member, payload)
 
@@ -13,13 +14,18 @@ dao 改造时用它做最后一公里，保证 ``service`` / ``render`` 拿到�
 - 字段名按实体列名匹配，匹配不上再试 camelCase -> snake_case，仍匹配不上则忽略
 - 时间字段支持 ISO 字符串（含 ``Z`` 后缀）、``"%Y-%m-%d %H:%M:%S"``、时间戳（秒）
 - 数值/字符串按列类型强制转换，转换失败保留原值由上层处理
+
+返回方向由 :func:`decode_payload` 按声明式方法的返回注解自动完成。
 """
 
 from __future__ import annotations
 
 import datetime
+import inspect
 import re
-from typing import Any, Iterable, Mapping, TypeVar
+import types
+import typing
+from typing import Any, Iterable, Mapping, TypeVar, get_args, get_origin
 
 from sqlalchemy import inspect as sa_inspect
 
@@ -183,3 +189,53 @@ def to_payload(
         else:
             result[key] = value
     return result
+
+
+# ------------------------------------------------------------------ 响应解码
+
+
+def _is_entity(candidate: Any) -> bool:
+    """判断注解类型是否是 SQLAlchemy ORM 实体（即能按列名解码）。"""
+    if not inspect.isclass(candidate):
+        return False
+    try:
+        sa_inspect(candidate).mapper
+    except Exception:  # noqa: BLE001  # 未映射的类会抛 NoInspectionAvailable 等
+        return False
+    return True
+
+
+def decode_payload(payload: Any, hint: Any) -> Any:
+    """按声明式方法的返回注解把响应数据解码成实体。
+
+    ============================  ============================================
+    返回注解                       结果
+    ============================  ============================================
+    ``list[Team]``                :func:`to_entities`，空响应返回 ``[]``
+    ``Team \| None``               :func:`to_entity`，空响应返回 ``None``
+    ``int`` / ``dict`` / ``None``  原样返回
+    ============================  ============================================
+
+    非 ORM 容器的元素类型无映射信息，直接按原类型组装列表。
+    """
+    if hint is None or hint is Any:
+        return payload
+
+    origin = get_origin(hint)
+
+    # Optional[Team] / Team | None：去掉 None 后按唯一剩余类型递归
+    if origin in (typing.Union, types.UnionType):
+        args = [arg for arg in get_args(hint) if arg is not type(None)]
+        return decode_payload(payload, args[0]) if len(args) == 1 else payload
+
+    if origin in (list, tuple, set, frozenset):
+        args = [arg for arg in get_args(hint) if arg is not Ellipsis]
+        item = args[0] if args else Any
+        if _is_entity(item):
+            return to_entities(item, payload)
+        return list(payload or [])
+
+    if _is_entity(hint):
+        return to_entity(hint, payload) if payload is not None else None
+
+    return payload

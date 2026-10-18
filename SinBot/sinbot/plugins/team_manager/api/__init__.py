@@ -1,24 +1,33 @@
 """外部 API 调用框架。
 
-对外只需要三个入口::
+业务代码只需要一个入口——门面对象 :data:`api`::
+
+    from ..api import api
+
+    await api.team.create(create_team_vo)                    # 开团
+    teams = await api.team.list_available(group_number="12") # 自动解码成 list[Team]
+
+一切 HTTP 细节（URL、method、请求头、参数分流、返回值解码）都在
+:mod:`.contract` 里声明，调用点看不到；新增接口只需在 contract 里加一个带
+``@get`` / ``@post`` 的方法。
+
+需要绕开声明式层做临时调试时，仍可拿到底层客户端::
 
     from ..api import get_api_client
-    from ..api.codec import to_entities, to_payload
 
-    client = get_api_client()
-    payload = await client.request("member.list_by_team", team_id=team_id)
-    members = to_entities(Member, payload)
+    raw = await get_api_client().request_raw(endpoint, params={...})
 
 生命周期由插件在 nonebot 启动时托管（见 ``plugins/team_manager/__init__.py``）；
-单元测试里可以用 :func:`set_api_client` 注入假实现。
+单元测试里可以用 :func:`set_api_client` 注入假实现，门面会自动跟随。
 """
 
 from __future__ import annotations
 
 from nonebot import logger
 
+from .binding import ApiFacade, BoundApi, Endpoint, Header, delete, get, patch, post, put
 from .client import ApiClient
-from .endpoint import Endpoint, EndpointRegistry
+from .contract import MemberApi, SpecApi, TeamApi
 from .errors import (
     ApiBusinessError,
     ApiConfigError,
@@ -31,8 +40,26 @@ from .errors import (
 from .response import ApiResponse, EnvelopeSpec
 
 __all__ = [
+    # 门面（业务代码主要用它）
+    "api",
+    "ApiFacade",
+    # 声明式契约
+    "TeamApi",
+    "MemberApi",
+    "SpecApi",
+    "get",
+    "post",
+    "put",
+    "patch",
+    "delete",
+    "Header",
+    "BoundApi",
+    # 底层（调试 / 自定义用）
     "ApiClient",
     "ApiResponse",
+    "Endpoint",
+    "EnvelopeSpec",
+    # 异常
     "ApiError",
     "ApiConfigError",
     "ApiTransportError",
@@ -40,9 +67,7 @@ __all__ = [
     "ApiStatusError",
     "ApiBusinessError",
     "ApiDecodeError",
-    "Endpoint",
-    "EndpointRegistry",
-    "EnvelopeSpec",
+    # 生命周期
     "get_api_client",
     "init_api_client",
     "set_api_client",
@@ -95,7 +120,10 @@ def get_api_client() -> ApiClient:
 
 
 def set_api_client(client: ApiClient | None) -> None:
-    """替换全局客户端（测试注入 / 热更新配置用）。"""
+    """替换全局客户端（测试注入 / 热更新配置用）。
+
+    门面 :data:`api` 每次调用时才取值，所以替换后无需重新挂载。
+    """
     global _client
     _client = client
 
@@ -108,3 +136,11 @@ async def shutdown_api_client() -> None:
     await _client.aclose()
     _client = None
     logger.info("[api] 外部 API 客户端已关闭")
+
+
+#: 声明式 API 门面：``api.<分组>.<方法>(...)``
+api = ApiFacade(get_api_client).mount(
+    team=TeamApi(),
+    member=MemberApi(),
+    spec=SpecApi(),
+)

@@ -17,8 +17,8 @@ class ScopedConfig(BaseModel):
     # ---------- 外部 API（数据持久化后端）----------
     # 后端根地址，例如 https://api.example.com；留空时所有调用直接失败
     api_base_url: str = ""
-    # 静态 API Key（在 Nacos 配置 team_manager__api_key）
-    api_key: str = ""
+    # 静态 API Key（在 Nacos 配置 team_manager__api_keys）
+    api_keys: str = ""
     # 携带 API Key 的请求头名
     api_key_header: str = "X-API-Key"
     # 单次请求超时（秒）

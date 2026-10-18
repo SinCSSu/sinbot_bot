@@ -1,30 +1,18 @@
 import datetime
-from datetime import timedelta
 
-from nonebot import logger
 from nonebot_plugin_orm import get_session
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError, NoResultFound
+from sqlalchemy.exc import NoResultFound
 
 from sinbot.plugins.team_manager.model.entity.team import Team
 from sinbot.plugins.team_manager.model.vo.create_team_vo import CreateTeamVo
-from sinbot.plugins.team_manager.utils.date_utils import parse_datetime_str
-from sinbot.plugins.team_manager.utils.ids import next_id
-from ..api import get_api_client
-from ..api.codec import to_entities, to_payload
+from ..api import api
+
 
 async def insert_new_team(team_info: CreateTeamVo) -> bool:
-    body = to_payload(team_info,datetime_format="%Y-%m-%d %H:%M:%S")
-
-    payload = await get_api_client().request("team.create",
-                                             json=body,
-                                             headers={
-                                                 "X-Group-Number":str(team_info.group_number),
-                                                 "X-Operator-Qq":str(team_info.created_by)
-                                             }
-                                             )
+    """开团：VO 自动摊平成 body，两个 X-* 请求头由契约里的模板填充。"""
+    await api.team.create(team_info)
     return True
-
 
 
 async def get_available_team_by_group_id(group_id: str) -> list[Team]:

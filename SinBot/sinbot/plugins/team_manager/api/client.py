@@ -1,17 +1,19 @@
-"""外部 API 客户端。
+"""外部 API 客户端（传输层）。
 
-对 dao 暴露的最小面::
+业务代码一般经由 :mod:`.binding` 的声明式门面 :data:`~.api` 间接触达这里；
+只有临时调试、或者想绕开 contract 直接发请求时才用本模块::
 
-    # 走注册表里的命名端点
-    teams = await api_client.request("team.list_available", group_number="12345")
-    # 直接传 Endpoint 也行（临时调试用）
-    raw = await api_client.request_raw("member.create", team_id=1, json={...})
+    from ..api import get_api_client
+    from ..api.binding import Endpoint
+
+    raw = await get_api_client().request_raw(Endpoint("tmp", "GET", "/ping"))
 
 设计要点：
 - 单例由 :mod:`api` 包在 nonebot 启动时创建，底层复用一个 ``httpx.AsyncClient``（连接池）
 - 静态 API Key 走请求头，头名可配
 - 只对传输层异常、超时、5xx/429 做指数退避重试，4xx 与业务失败立即抛出
 - 成功返回解包后的 ``data``，需要原始响应时用 ``request_raw``
+- 端点一律传 :class:`~.binding.Endpoint` 对象；构造时注入 ``registry`` 才支持字符串名
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from typing import Any, Mapping
 import httpx
 from nonebot import logger
 
-from .endpoint import Endpoint, EndpointRegistry
+from .binding import Endpoint
 from .errors import (
     ApiConfigError,
     ApiDecodeError,
@@ -48,8 +50,9 @@ class ApiClient:
         backoff: float = 0.5,
         extra_headers: Mapping[str, str] | None = None,
         envelope: EnvelopeSpec | None = None,
-        registry: EndpointRegistry | None = None,
+        registry: Any | None = None,
     ) -> None:
+        """``registry`` 为可选的 ``EndpointRegistry``（仅用于兼容按字符串名取端点）。"""
         # 允许空 base_url 构造（迁移过渡期后端地址可能还没配），真正调用时才报错，
         # 避免配置缺失直接把 bot 启动流程打断
         self._base_url = base_url.rstrip("/") + "/" if base_url else ""
@@ -121,21 +124,6 @@ class ApiClient:
             timeout=timeout,
         )
 
-    async def get(self, endpoint: str | Endpoint, **kwargs: Any) -> Any:
-        return await self.request(endpoint, **kwargs)
-
-    async def post(self, endpoint: str | Endpoint, json: Mapping[str, Any] | None = None, **kwargs: Any) -> Any:
-        return await self.request(endpoint, json=json, **kwargs)
-
-    async def put(self, endpoint: str | Endpoint, json: Mapping[str, Any] | None = None, **kwargs: Any) -> Any:
-        return await self.request(endpoint, json=json, **kwargs)
-
-    async def patch(self, endpoint: str | Endpoint, json: Mapping[str, Any] | None = None, **kwargs: Any) -> Any:
-        return await self.request(endpoint, json=json, **kwargs)
-
-    async def delete(self, endpoint: str | Endpoint, **kwargs: Any) -> Any:
-        return await self.request(endpoint, **kwargs)
-
     async def aclose(self) -> None:
         await self._client.aclose()
 
@@ -150,11 +138,12 @@ class ApiClient:
     def _resolve(self, endpoint: str | Endpoint) -> Endpoint:
         if isinstance(endpoint, Endpoint):
             return endpoint
-        if self._registry is None:
-            from .registry import DEFAULT_ENDPOINTS
-
-            self._registry = DEFAULT_ENDPOINTS
-        return self._registry.get(endpoint)
+        if self._registry is not None:
+            return self._registry.get(endpoint)
+        raise ApiConfigError(
+            f"端点名 {endpoint!r} 无法解析：请传 Endpoint 对象，"
+            f"或改用 api/contract.py 中声明的接口（api.<分组>.<方法>）"
+        )
 
     @staticmethod
     def _split_kwargs(
