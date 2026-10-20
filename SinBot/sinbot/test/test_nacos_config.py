@@ -19,6 +19,7 @@ from sinbot.nacos_config import (
     fetch_nacos_config,
     load_bootstrap,
     load_nacos_config,
+    parse_config,
     parse_properties,
 )
 
@@ -195,6 +196,57 @@ class ParsePropertiesTest(unittest.TestCase):
         self.assertEqual(parse_properties("A=x\\\\\nB=y"), {"A": "x\\", "B": "y"})
 
 
+class ParseConfigTest(unittest.TestCase):
+    """Nacos 内容格式自动识别：YAML 扁平化 / properties 回退。"""
+
+    def test_yaml_nested_is_flattened(self):
+        content = (
+            "environment: dev\n"
+            "log_level: DEBUG\n"
+            "team_manager:\n"
+            "  llm_base_url: https://api.deepseek.com\n"
+            "  api_timeout: 10\n"
+        )
+        self.assertEqual(
+            parse_config(content),
+            {
+                "ENVIRONMENT": "dev",
+                "LOG_LEVEL": "DEBUG",
+                "TEAM_MANAGER__LLM_BASE_URL": "https://api.deepseek.com",
+                "TEAM_MANAGER__API_TIMEOUT": "10",
+            },
+        )
+
+    def test_yaml_list_becomes_json(self):
+        self.assertEqual(
+            parse_config('onebot_ws_urls: ["ws://1.2.3.4:3001"]'),
+            {"ONEBOT_WS_URLS": '["ws://1.2.3.4:3001"]'},
+        )
+
+    def test_multi_level_nesting(self):
+        self.assertEqual(
+            parse_config("team_manager:\n  llm:\n    model: m\n"),
+            {"TEAM_MANAGER__LLM__MODEL": "m"},
+        )
+
+    def test_properties_falls_back(self):
+        self.assertEqual(parse_config("A=1\nB=2"), {"A": "1", "B": "2"})
+        self.assertEqual(
+            parse_config('ONEBOT_WS_URLS=["ws://10.0.0.196:3001"]'),
+            {"ONEBOT_WS_URLS": '["ws://10.0.0.196:3001"]'},
+        )
+
+    def test_duplicate_key_raises(self):
+        content = (
+            "team_manager:\n"
+            "  llm_model: a\n"
+            "team_manager:\n"
+            "  llm_model: b\n"
+        )
+        with self.assertRaises(NacosConfigError):
+            parse_config(content)
+
+
 class LoadBootstrapTest(unittest.TestCase):
     """引导参数：系统环境变量优先，缺失键回退 .env。"""
 
@@ -364,6 +416,30 @@ class LoadNacosConfigTest(unittest.TestCase):
                 finally:
                     for key in ("LOG_LEVEL", "TEAM_MANAGER__LLM_MODEL"):
                         os.environ.pop(key, None)
+
+    def test_empty_value_skipped(self):
+        """空值键必须跳过：NoneBot 会把顶层配置项按 JSON 解析而报错。"""
+        bootstrap = NacosBootstrap(
+            server_addr="127.0.0.1:8848", data_ids=("team-manager.properties",)
+        )
+        remote = {"TEAM_MANAGER": "", "TEAM_MANAGER__LLM_MODEL": "deepseek-v4-flash"}
+        with unittest.mock.patch(
+            "sinbot.nacos_config.load_bootstrap", return_value=bootstrap
+        ), unittest.mock.patch(
+            "sinbot.nacos_config.fetch_nacos_config", return_value=remote
+        ):
+            with _clean_bootstrap_env():
+                os.environ.pop("TEAM_MANAGER", None)
+                try:
+                    applied = load_nacos_config()
+                    self.assertNotIn("TEAM_MANAGER", os.environ)
+                    self.assertNotIn("TEAM_MANAGER", applied)
+                    self.assertEqual(
+                        os.environ["TEAM_MANAGER__LLM_MODEL"], "deepseek-v4-flash"
+                    )
+                finally:
+                    os.environ.pop("TEAM_MANAGER", None)
+                    os.environ.pop("TEAM_MANAGER__LLM_MODEL", None)
 
     def test_existing_driver_not_overwritten(self):
         bootstrap = NacosBootstrap(

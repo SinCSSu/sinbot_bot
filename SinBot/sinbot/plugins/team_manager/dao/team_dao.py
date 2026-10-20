@@ -7,12 +7,13 @@ from sqlalchemy.exc import NoResultFound
 from sinbot.plugins.team_manager.model.entity.team import Team
 from sinbot.plugins.team_manager.model.vo.create_team_vo import CreateTeamVo
 from ..api import api
+from ..model.vo.team_info_vo import TeamInfoVo
 
 
-async def insert_new_team(team_info: CreateTeamVo) -> bool:
+async def insert_new_team(group_number :str,sender:str,msg:str) -> TeamInfoVo:
     """开团：VO 自动摊平成 body，两个 X-* 请求头由契约里的模板填充。"""
-    await api.team.create(team_info)
-    return True
+    return await api.team.create(msg,group_number,sender)
+
 
 
 async def get_available_team_by_group_id(group_id: str) -> list[Team]:

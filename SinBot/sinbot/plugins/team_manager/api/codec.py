@@ -27,6 +27,7 @@ import types
 import typing
 from typing import Any, Iterable, Mapping, TypeVar, get_args, get_origin
 
+from pydantic import BaseModel
 from sqlalchemy import inspect as sa_inspect
 
 from .errors import ApiDecodeError
@@ -205,6 +206,11 @@ def _is_entity(candidate: Any) -> bool:
     return True
 
 
+def _is_pydantic_model(candidate: Any) -> bool:
+    """判断注解类型是否是 pydantic 模型（VO 这类非 ORM 类型靠它按注解解码）。"""
+    return inspect.isclass(candidate) and issubclass(candidate, BaseModel)
+
+
 def decode_payload(payload: Any, hint: Any) -> Any:
     """按声明式方法的返回注解把响应数据解码成实体。
 
@@ -213,10 +219,13 @@ def decode_payload(payload: Any, hint: Any) -> Any:
     ============================  ============================================
     ``list[Team]``                :func:`to_entities`，空响应返回 ``[]``
     ``Team \| None``               :func:`to_entity`，空响应返回 ``None``
+    ``list[TeamInfoVo]``          逐个 ``model_validate``，空响应返回 ``[]``
+    ``TeamInfoVo``                ``model_validate``，空响应返回 ``None``
     ``int`` / ``dict`` / ``None``  原样返回
     ============================  ============================================
 
-    非 ORM 容器的元素类型无映射信息，直接按原类型组装列表。
+    pydantic 模型（VO）与 ORM 实体走不同的解码路径：前者按字段注解，
+    后者按数据库列名。
     """
     if hint is None or hint is Any:
         return payload
@@ -233,9 +242,14 @@ def decode_payload(payload: Any, hint: Any) -> Any:
         item = args[0] if args else Any
         if _is_entity(item):
             return to_entities(item, payload)
+        if _is_pydantic_model(item):
+            return [item.model_validate(entry) for entry in payload or []]
         return list(payload or [])
 
     if _is_entity(hint):
         return to_entity(hint, payload) if payload is not None else None
+
+    if _is_pydantic_model(hint):
+        return hint.model_validate(payload) if payload is not None else None
 
     return payload

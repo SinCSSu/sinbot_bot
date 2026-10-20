@@ -25,7 +25,8 @@ from __future__ import annotations
 
 from nonebot import logger
 
-from .binding import ApiFacade, BoundApi, Endpoint, Header, delete, get, patch, post, put
+from ..config import parse_api_keys
+from .binding import ApiFacade, BoundApi, Endpoint, Header, RawBody, delete, get, patch, post, put
 from .client import ApiClient
 from .contract import MemberApi, SpecApi, TeamApi
 from .errors import (
@@ -53,6 +54,7 @@ __all__ = [
     "patch",
     "delete",
     "Header",
+    "RawBody",
     "BoundApi",
     # 底层（调试 / 自定义用）
     "ApiClient",
@@ -95,13 +97,22 @@ def init_api_client(config: object | None = None) -> ApiClient:
     if not base_url:
         logger.warning("[api] 未配置 TEAM_MANAGER__API_BASE_URL，外部 API 调用将全部失败")
 
+    api_keys = parse_api_keys(getattr(config, "api_keys", "") or "")
+    if base_url and not api_keys:
+        logger.warning(
+            "[api] 未配置 API Key（Nacos 里是 team_manager.api-keys），"
+            "请求将不携带认证头，后端可能返回 401/403"
+        )
+    elif len(api_keys) > 1:
+        logger.info(f"[api] 配置了 {len(api_keys)} 个 API Key，请求头只携带第一个")
+
     success_codes = tuple(
         item.strip() for item in str(getattr(config, "api_success_codes", "") or "").split(",") if item.strip()
     )
 
     _client = ApiClient(
         base_url=base_url,
-        api_key=getattr(config, "api_keys", "") or "",
+        api_key=api_keys[0] if api_keys else "",
         api_key_header=getattr(config, "api_key_header", "") or "X-API-Key",
         timeout=float(getattr(config, "api_timeout", 10.0)),
         max_retries=int(getattr(config, "api_max_retries", 2)),

@@ -18,6 +18,7 @@ driver.register_adapter(OnbotV11Adapter)
 nonebot.load_builtin_plugins("echo")  # 内置插件
 # nonebot.load_plugins("sinbot/plugins")  # 本地插件
 nonebot.load_plugin(Path("./sinbot/plugins/jm_download"))
+nonebot.load_plugin(Path("./sinbot/plugins/team_manager"))
 
 
 

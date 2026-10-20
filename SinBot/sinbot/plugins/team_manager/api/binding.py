@@ -20,6 +20,7 @@
 ================================  ==========================================
 名字命中 ``{path_param}``           URL 路径（自动 URL 编码）
 ``Annotated[T, Header("X-Foo")]``  请求头
+``Annotated[str, RawBody()]``      原始请求体（原样发送，不做 JSON 编码）
 VO / dataclass / pydantic 模型      JSON body（自动 :func:`to_payload`）
 其余                               GET/DELETE → query；其余方法 → 并入 body
 ================================  ==========================================
@@ -50,6 +51,7 @@ __all__ = [
     "Endpoint",
     "Header",
     "HttpSpec",
+    "RawBody",
     "delete",
     "get",
     "patch",
@@ -136,6 +138,15 @@ class Header:
 
 
 @dataclass(frozen=True)
+class RawBody:
+    """``Annotated[str, RawBody()]``：该参数原样作为请求体发送。
+
+    用于后端直接处理原始文本（例如把整条群消息交给服务端解析）的场景：
+    不做 JSON 编码，请求体就是参数字符串本身。
+    """
+
+
+@dataclass(frozen=True)
 class HttpSpec:
     """一个声明式方法携带的全部 HTTP 元信息。"""
 
@@ -201,6 +212,13 @@ def _find_header(hint: Any) -> str | None:
     return None
 
 
+def _is_raw_body(hint: Any) -> bool:
+    """判断注解是否是 ``Annotated[T, RawBody()]``（参数原样作为请求体）。"""
+    if get_origin(hint) is not Annotated:
+        return False
+    return any(isinstance(meta, RawBody) for meta in get_args(hint)[1:])
+
+
 def _is_payload_value(value: Any) -> bool:
     """判断一个参数值是否应整体序列化成请求体（VO / dataclass / pydantic 模型）。"""
     if isinstance(value, _ATOMIC_TYPES):
@@ -253,6 +271,10 @@ class BoundApi:
             for name in self._signature.parameters
             if (header := _find_header(hints.get(name)))
         }
+        self._raw_body_param = next(
+            (name for name in self._signature.parameters if _is_raw_body(hints.get(name))),
+            None,
+        )
         functools.update_wrapper(self, func)
 
     @property
@@ -276,6 +298,10 @@ class BoundApi:
         headers = {
             self._header_params[name]: values.pop(name) for name in list(values) if name in self._header_params
         }
+        # 2.1) Annotated[str, RawBody()]：原样作为请求体，不做 JSON 编码
+        raw_body: Any = None
+        if self._raw_body_param is not None:
+            raw_body = values.pop(self._raw_body_param, None)
         # 3) 剩下的一分为二：VO 对象摊平进请求体，标量走 query 或并入 body
         payload: dict[str, Any] = {}
         plain: dict[str, Any] = {}
@@ -293,6 +319,7 @@ class BoundApi:
         response = await client.request_raw(
             endpoint,
             json=payload or None,
+            content=raw_body,
             headers=headers or None,
             **path_values,
             **plain,

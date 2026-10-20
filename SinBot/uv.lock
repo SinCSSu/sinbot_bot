@@ -3411,6 +3411,7 @@ dependencies = [
     { name = "nonebot2", extra = ["fastapi", "websockets"] },
     { name = "openai" },
     { name = "pillow" },
+    { name = "pyyaml" },
     { name = "require" },
 ]
 
@@ -3430,6 +3431,7 @@ requires-dist = [
     { name = "nonebot2", extras = ["fastapi", "websockets"], specifier = ">=2.5.0" },
     { name = "openai", specifier = ">=3.6.0" },
     { name = "pillow", specifier = ">=10.0.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "require", specifier = ">=0.1.1" },
 ]
 

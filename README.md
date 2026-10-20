@@ -87,12 +87,13 @@ NoneBot 全局配置、`nonebot_plugin_orm`、OneBot 适配器以及各插件的
 | `TEAM_MANAGER__LLM_BASE_URL` | `https://api.deepseek.com` | `.env` |
 | `TEAM_MANAGER__LLM_MODEL` | `deepseek-v4-flash` | `.env` |
 | `TEAM_MANAGER__API_BASE_URL` | `http://127.0.0.1:18080` | `.env` |
+| `TEAM_MANAGER__API_KEYS` | 后端静态密钥（也接受 YAML 的 `team_manager.api-keys` 列表） | 后端提供 |
 | `TEAM_MANAGER__API_KEY_HEADER` | `X-Api-Key` | `.env` |
 | `TEAM_MANAGER__API_TIMEOUT` | `10` | `.env` |
 | `TEAM_MANAGER__API_MAX_RETRIES` | `2` | `.env` |
 
 补充：`plugin/team_manager/config.py` 中还有若干字段此前未配置（一直走默认值），
-如需调参可直接在 Nacos 增加：`TEAM_MANAGER__LLM_API_KEY`、`TEAM_MANAGER__API_KEY`、
+如需调参可直接在 Nacos 增加：`TEAM_MANAGER__LLM_API_KEY`、`TEAM_MANAGER__API_KEYS`、
 `TEAM_MANAGER__LLM_MAX_TURNS`、`TEAM_MANAGER__API_RETRY_BACKOFF`、
 `TEAM_MANAGER__API_SUCCESS_CODES`。
 
@@ -104,15 +105,32 @@ NoneBot 全局配置、`nonebot_plugin_orm`、OneBot 适配器以及各插件的
 当前为**启动时拉取一次**，不注册监听（NoneBot 多数配置在 init 时已固化，热更实际
 生效范围有限）。修改 Nacos 配置后重启即生效。
 
-### properties 语法
+### 配置内容格式
 
-支持 `#` / `!` 注释、`=` 与 `:` 分隔、反斜杠续行、`\n` / `\t` 转义：
+`sinbot.nacos_config.parse_config` **自动识别**内容格式，两种都能用。
+
+**properties**：支持 `#` / `!` 注释、`=` 与 `:` 分隔、反斜杠续行、`\n` / `\t` 转义：
 
 ```properties
 # 注释
 ENVIRONMENT=dev
 ONEBOT_WS_URLS=["ws://10.0.0.196:3001"]
 ```
+
+**YAML**：嵌套结构会自动扁平化为 `父级__子级` 的环境变量名，列表/字典按 JSON
+字符串注入（NoneBot 的 `ONEBOT_WS_URLS` 正需要这种形式）：
+
+```yaml
+environment: dev
+onebot_ws_urls: ["ws://10.0.0.196:3001"]
+team_manager:
+  llm_base_url: https://api.deepseek.com
+  api_timeout: 10
+```
+
+等价于 `TEAM_MANAGER__LLM_BASE_URL=...` 与 `TEAM_MANAGER__API_TIMEOUT=10`。
+注意两点：字段名应与 `config.py` 中的字段一致（`api_keys` 也接受 `api-keys`，
+其余字段不兼容连字符写法），同一层级**不允许重复键**（重复会直接报错，而不是被静默覆盖）。
 
 ## Docker 部署
 

@@ -84,13 +84,20 @@ class ApiClient:
         *,
         params: Mapping[str, Any] | None = None,
         json: Mapping[str, Any] | None = None,
+        content: str | bytes | None = None,
         headers: Mapping[str, str] | None = None,
         timeout: float | None = None,
         **kwargs: Any,
     ) -> Any:
         """调用端点并返回解包后的业务数据。"""
         response = await self.request_raw(
-            endpoint, params=params, json=json, headers=headers, timeout=timeout, **kwargs
+            endpoint,
+            params=params,
+            json=json,
+            content=content,
+            headers=headers,
+            timeout=timeout,
+            **kwargs,
         )
         return response.payload
 
@@ -100,11 +107,16 @@ class ApiClient:
         *,
         params: Mapping[str, Any] | None = None,
         json: Mapping[str, Any] | None = None,
+        content: str | bytes | None = None,
         headers: Mapping[str, str] | None = None,
         timeout: float | None = None,
         **kwargs: Any,
     ) -> ApiResponse:
-        """同 :meth:`request`，但返回完整的 :class:`ApiResponse`。"""
+        """同 :meth:`request`，但返回完整的 :class:`ApiResponse`。
+
+        ``content`` 用于「原样发送请求体」的场景（不做 JSON 编码），此时不能再传
+        ``json`` 或额外的请求体字段。
+        """
         ep = self._resolve(endpoint)
         path_values, extra = self._split_kwargs(ep, kwargs)
 
@@ -113,13 +125,26 @@ class ApiClient:
         for key, value in extra.items():
             if value is None:
                 continue
+            if content is not None and ep.has_body:
+                raise ApiConfigError(
+                    f"{ep.name} 已指定原始请求体 content，不能再附带请求体字段: {key}"
+                )
             (body if ep.has_body else query)[key] = value
+
+        if content is not None:
+            if not ep.has_body:
+                raise ApiConfigError(f"{ep.name} 是 {ep.method} 请求，不支持原始请求体 content")
+            if body:
+                raise ApiConfigError(
+                    f"{ep.name} 的 content 与 json 只能二选一，已收到 json 字段: {sorted(body)}"
+                )
 
         return await self._send(
             ep,
             path=ep.format_path(path_values),
             params=query or None,
             json=body or None,
+            content=content,
             headers=headers,
             timeout=timeout,
         )
@@ -134,6 +159,28 @@ class ApiClient:
         await self.aclose()
 
     # ------------------------------------------------------------------ 内部实现
+
+    _SENSITIVE_HEADER_PARTS = ("authorization", "key", "token", "secret", "cookie")
+
+    def _build_url(self, path: str, params: Mapping[str, Any] | None) -> str:
+        """拼出用于日志的完整 URL（含查询串）。"""
+        url = str(self._client.base_url.join(path.lstrip("/")))
+        if params:
+            query = str(httpx.QueryParams(params))
+            if query:
+                url = f"{url}{'&' if '?' in url else '?'}{query}"
+        return url
+
+    def _mask_headers(self, headers: Mapping[str, str]) -> dict[str, str]:
+        """日志用：把认证类请求头的值打码，避免密钥落盘。"""
+        masked: dict[str, str] = {}
+        for name, value in headers.items():
+            lowered = name.lower()
+            if any(part in lowered for part in self._SENSITIVE_HEADER_PARTS):
+                masked[name] = "***" if value else ""
+            else:
+                masked[name] = value
+        return masked
 
     def _resolve(self, endpoint: str | Endpoint) -> Endpoint:
         if isinstance(endpoint, Endpoint):
@@ -167,6 +214,7 @@ class ApiClient:
         path: str,
         params: Mapping[str, Any] | None,
         json: Mapping[str, Any] | None,
+        content: str | bytes | None,
         headers: Mapping[str, str] | None,
         timeout: float | None,
     ) -> ApiResponse:
@@ -174,17 +222,32 @@ class ApiClient:
             raise ApiConfigError("api_base_url 未配置，无法调用外部 API")
 
         request_headers = {**self._headers, **(headers or {})}
+        # 原始请求体默认按文本发送；要别的 Content-Type 在 headers 里显式覆盖
+        if content is not None and not any(
+            key.lower() == "content-type" for key in request_headers
+        ):
+            request_headers["Content-Type"] = "text/plain; charset=utf-8"
         attempts = self._max_retries + 1
         error: Exception | None = None
+        url = self._build_url(path, params)
 
         for attempt in range(attempts):
             started = time.perf_counter()
+            logger.debug(
+                f"[api] 出站请求 {endpoint.method} {url} "
+                f"(第 {attempt + 1}/{attempts} 次)"
+            )
+            logger.debug(f"[api] 请求头: {self._mask_headers(request_headers)}")
+            logger.debug(
+                f"[api] 请求体: {content if content is not None else (dict(json) if json else None)}"
+            )
             try:
                 response = await self._client.request(
                     endpoint.method,
                     path.lstrip("/"),
                     params=params,
                     json=json,
+                    content=content,
                     headers=request_headers,
                     timeout=timeout if timeout is not None else self._timeout,
                 )

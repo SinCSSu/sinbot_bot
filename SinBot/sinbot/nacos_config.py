@@ -30,10 +30,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+import yaml
 from dotenv import dotenv_values
 from nonebot import logger
 
@@ -44,6 +47,7 @@ __all__ = [
     "fetch_nacos_config",
     "load_bootstrap",
     "load_nacos_config",
+    "parse_config",
     "parse_properties",
 ]
 
@@ -166,6 +170,78 @@ def parse_properties(content: str) -> dict[str, str]:
             continue
         parsed[key] = value
     return parsed
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """禁止重复键的 SafeLoader。
+
+    YAML 规范不允许同一层级出现重复键，但 PyYAML 默认静默保留最后一个，
+    对配置来说是灾难（例如两个 ``team_manager:`` 块会让前一个整体丢失）。
+    """
+
+
+def _construct_unique_mapping(loader: yaml.SafeLoader, node: yaml.MappingNode, deep: bool = False):
+    mapping: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise NacosConfigError(
+                f"Nacos 配置存在重复键 {key!r}（第 {key_node.start_mark.line + 1} 行）："
+                f"请合并为同一个块，否则同名键会被静默覆盖"
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping
+)
+
+
+def _flatten(node: dict[Any, Any], prefix: str = "") -> dict[str, str]:
+    """把嵌套字典扁平化为 ``环境变量名 -> 字符串值``。
+
+    ``{"team_manager": {"llm_model": "x"}}`` -> ``{"TEAM_MANAGER__LLM_MODEL": "x"}``；
+    列表/字典值按 JSON 序列化（NoneBot 的 ``ONEBOT_WS_URLS`` 就要求这种形式）。
+    """
+    flat: dict[str, str] = {}
+    for key, value in node.items():
+        env_key = f"{prefix}__{key}" if prefix else str(key)
+        env_key = env_key.upper()
+        if isinstance(value, dict):
+            flat.update(_flatten(value, env_key))
+        elif isinstance(value, (list, tuple)):
+            flat[env_key] = json.dumps(value, ensure_ascii=False)
+        elif isinstance(value, bool):
+            flat[env_key] = "true" if value else "false"
+        elif value is None:
+            continue
+        elif isinstance(value, str):
+            flat[env_key] = value
+        else:
+            flat[env_key] = str(value)
+    return flat
+
+
+def parse_config(content: str) -> dict[str, str]:
+    """解析 Nacos 配置内容，自动识别 YAML 与 properties 两种格式。
+
+    Nacos 控制台创建配置时可以选择格式：选 YAML 写嵌套结构、选 Properties 写
+    ``KEY=VALUE``。两种都需要支持——按 YAML 尝试解析，得到映射就按嵌套扁平化；
+    否则回退 :func:`parse_properties`。
+
+    Raises:
+        NacosConfigError: YAML 存在重复键（否则会被静默覆盖）。
+    """
+    try:
+        document = yaml.load(content, Loader=_UniqueKeyLoader)
+    except NacosConfigError:
+        raise
+    except yaml.YAMLError:
+        document = None
+    if isinstance(document, dict):
+        return _flatten(document)
+    return parse_properties(content)
 
 
 def _as_bool(raw: str, default: bool) -> bool:
@@ -310,7 +386,7 @@ async def afetch_nacos_config(bootstrap: NacosBootstrap) -> dict[str, str]:
                 logger.warning(message)
                 continue
 
-            parsed = parse_properties(content)
+            parsed = parse_config(content)
             merged.update(parsed)
             # 只打印键名，避免敏感值（token / api_key / 密码）进入日志
             logger.info(
@@ -345,6 +421,16 @@ def load_nacos_config(env_file: Path | str | None = None) -> dict[str, str]:
         if key in PROTECTED_KEYS:
             logger.warning(
                 f"Nacos 下发了受保护的配置项 {key}，已忽略（本地 .env 优先）"
+            )
+            continue
+        if not value.strip():
+            # NoneBot 的 EnvSettings 会把每个顶层配置项（不含 "__" 的键，如 TEAM_MANAGER）
+            # 按 JSON 解析，空值会抛 ``SettingsError: error parsing env var "team_manager"``。
+            # Nacos 里出现这种键通常是漏写字段名（应写 TEAM_MANAGER__XXX）或写成了 YAML。
+            logger.warning(
+                f"Nacos 配置项 {key} 的值为空，已跳过：NoneBot 会把键 {key} 当作顶层"
+                f'配置项并按 JSON 解析，空值会直接导致启动失败；'
+                f"若本意是配置插件字段，请写成 {key}__字段名=值 的形式"
             )
             continue
         os.environ[key] = value
