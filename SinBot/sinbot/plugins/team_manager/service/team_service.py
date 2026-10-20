@@ -49,7 +49,9 @@ async def create_team(message: Event, event: GroupMessageEvent):
 
 
 async def get_available_team_list(group_number: str, sender: str) -> list[TeamInfoVo]:
-    return await get_available_team_by_group_id(group_number, sender)
+    team_list = await get_available_team_by_group_id(group_number, sender)
+    team_list.sort(key=lambda team: team.team_no)
+    return team_list
 
 
 @team_controller.view_all_team.handle()
