@@ -30,6 +30,8 @@ from nonebot import logger
 from sinbot.plugins.team_manager.dao import member_dao, spec_dao
 from sinbot.plugins.team_manager.model.entity.member import Member
 from sinbot.plugins.team_manager.model.entity.team import Team
+from sinbot.plugins.team_manager.model.vo.member_info_vo import MemberInfoVo
+from sinbot.plugins.team_manager.model.vo.team_detail_vo import TeamDetailVo
 
 # 心法大类（新语义）：1=内功 2=外功 3=坦(T) 4=奶
 TYPE_INTERNAL = 1
@@ -146,7 +148,7 @@ def _format_start_time(start_time: datetime | None) -> str:
     return date_str
 
 
-def _build_title(team: Team) -> str:
+def _build_title(team: Team | TeamDetailVo) -> str:
     """顶部标题：team_name + dungeon；dungeon 为空或与 team_name 相同时只显示一次。"""
     name = (team.team_name or "").strip()
     dungeon = (team.dungeon or "").strip()
@@ -166,11 +168,11 @@ def _team_label(team_id: int, team_no: int | None) -> str:
 # 旧图绘制逻辑移植（GetImg / DrawRectangal）
 # ---------------------------------------------------------------------------
 def _draw_cell(
-    img: Image.Image,
-    drawer: ImageDraw.ImageDraw,
-    x: int,
-    y: int,
-    member: dict,
+        img: Image.Image,
+        drawer: ImageDraw.ImageDraw,
+        x: int,
+        y: int,
+        member: dict,
 ) -> None:
     """复刻旧 DrawRectangal：心法色块 + 黑边框 + 昵称截 6 字 + 主图标圆 + 双修副圆。"""
     # 心法色块
@@ -253,9 +255,9 @@ def _draw_cell(
 
 
 def _layout_columns(
-    external: list[dict],
-    internal: list[dict],
-    col4: list[dict],
+        external: list[dict],
+        internal: list[dict],
+        col4: list[dict],
 ) -> tuple[list[dict], list[dict], list[dict], list[dict], list[dict]]:
     """分列工具：把成员 cell 布局成五列，返回 (列0, 列1, ..., 列4) 五个列表。
 
@@ -277,7 +279,7 @@ def _layout_columns(
         external[1::2],  # 列 1：外功奇位成员
         internal[0::2],  # 列 2：内功偶位成员
         internal[1::2],  # 列 3：内功奇位成员
-        list(col4),      # 列 4：坦/奶/未知 顺排
+        list(col4),  # 列 4：坦/奶/未知 顺排
     ]
     if max(len(c) for c in cols) <= 5:
         return cols[0], cols[1], cols[2], cols[3], cols[4]
@@ -293,11 +295,11 @@ def _layout_columns(
 
 
 def _render_panel_sync(
-    title: str,
-    team_label: str,
-    start_time: datetime | None,
-    comment: str,
-    columns: tuple[list[dict], list[dict], list[dict], list[dict], list[dict]],
+        title: str,
+        team_label: str,
+        start_time: datetime | None,
+        comment: str,
+        columns: tuple[list[dict], list[dict], list[dict], list[dict], list[dict]],
 ) -> bytes:
     """同步绘制五列网格阵容图（放入线程执行），返回 PNG bytes。
 
@@ -400,7 +402,7 @@ def _fallback_spec(spec_id: int):
     )()
 
 
-def _build_cell_data(member: Member, spec, sub_spec) -> dict:
+def _build_cell_data(member: Member | MemberInfoVo, spec, sub_spec) -> dict:
     """把单个成员组装成绘图 cell dict（对齐旧 GetImg 的 member dict 语义）。
 
     双修：``sub_spec`` 为真值、且副修心法存在且不同于主心法时才画副修；
@@ -425,55 +427,56 @@ def _build_cell_data(member: Member, spec, sub_spec) -> dict:
 
 
 async def _collect_members(
-    team: Team,
+        team: TeamDetailVo,
 ) -> tuple[dict[int, list[dict]], str, datetime | None, str]:
     """查询成员与心法映射，完成分桶并返回绘图所需全部数据。
 
     返回 (buckets, title, start_time, comment)；
     buckets: {TYPE_EXTERNAL/TYPE_INTERNAL/TYPE_TANK/TYPE_HEALER/TYPE_UNKNOWN: [cell, ...]}
     """
-    members = await member_dao.get_members_by_team_id(team.team_id)
+    members = team.members
+    if members is not None:
+        main_ids = {m.specialization for m in members if m.specialization}
+        sub_ids = {m.sub_spec for m in members if m.sub_spec}
+        spec_map = await spec_dao.get_specs_by_ids(main_ids | sub_ids)
 
-    main_ids = {m.specialization for m in members if m.specialization}
-    sub_ids = {m.sub_spec for m in members if m.sub_spec}
-    spec_map = await spec_dao.get_specs_by_ids(main_ids | sub_ids)
+        buckets: dict[int, list[dict]] = {
+            TYPE_EXTERNAL: [],
+            TYPE_INTERNAL: [],
+            TYPE_TANK: [],
+            TYPE_HEALER: [],
+            TYPE_UNKNOWN: [],
+        }
+        for member in members:
+            spec = spec_map.get(member.specialization)
+            if spec is None:
+                logger.warning(
+                    f"成员心法未匹配到记录，归入未知桶：member={member.member_name} "
+                    f"spec_id={member.specialization}"
+                )
+                spec = _fallback_spec(member.specialization)
+            spec_type = int(getattr(spec, "spec_type", TYPE_UNKNOWN) or TYPE_UNKNOWN)
+            if spec_type not in buckets:
+                logger.warning(
+                    f"成员心法 spec_type 不在 1-4，归入未知桶：spec_id={member.specialization} "
+                    f"spec_type={spec_type}"
+                )
+                spec_type = TYPE_UNKNOWN
+            sub_spec = spec_map.get(member.sub_spec) if member.sub_spec else None
+            buckets[spec_type].append(_build_cell_data(member, spec, sub_spec))
 
-    buckets: dict[int, list[dict]] = {
-        TYPE_EXTERNAL: [],
-        TYPE_INTERNAL: [],
-        TYPE_TANK: [],
-        TYPE_HEALER: [],
-        TYPE_UNKNOWN: [],
-    }
-    for member in members:
-        spec = spec_map.get(member.specialization)
-        if spec is None:
-            logger.warning(
-                f"成员心法未匹配到记录，归入未知桶：member={member.member_name} "
-                f"spec_id={member.specialization}"
-            )
-            spec = _fallback_spec(member.specialization)
-        spec_type = int(getattr(spec, "spec_type", TYPE_UNKNOWN) or TYPE_UNKNOWN)
-        if spec_type not in buckets:
-            logger.warning(
-                f"成员心法 spec_type 不在 1-4，归入未知桶：spec_id={member.specialization} "
-                f"spec_type={spec_type}"
-            )
-            spec_type = TYPE_UNKNOWN
-        sub_spec = spec_map.get(member.sub_spec) if member.sub_spec else None
-        buckets[spec_type].append(_build_cell_data(member, spec, sub_spec))
-
-    return buckets, _build_title(team), team.start_time, (team.comment or "").strip()
+        return buckets, _build_title(team), team.start_time, (team.comment or "").strip()
+    return None
 
 
-async def render_team_panel_for_team(team: Team, team_no: int | None = None) -> bytes:
+async def render_team_panel_for_team(team: TeamDetailVo, team_no: int | None = None) -> bytes:
     """按旧 bot 风格绘制五列网格阵容图，返回 PNG bytes。
 
     :param team: 团队实体（无需预取成员）。
     :param team_no: 该团在"当前在开团队"中的序号，信息行显示为
         "（当前开团序号:N）"；缺省时回退显示库内团队 ID。
     """
-    buckets, title, start_time, comment = await _collect_members(team)
+    buckets, title, start_time, comment = await _collect_members(TeamDetailVo)
     # 列 4 = 坦 + 奶 + 未知 顺排；具体五列排布交给 _layout_columns
     col4 = buckets[TYPE_TANK] + buckets[TYPE_HEALER] + buckets[TYPE_UNKNOWN]
     columns = _layout_columns(

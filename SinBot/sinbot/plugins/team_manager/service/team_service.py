@@ -2,13 +2,13 @@ from json import tool
 
 from nonebot import logger
 from nonebot.adapters import Event
-from nonebot.adapters.onebot.v11 import GroupMessageEvent,MessageSegment
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
 from nonebot.internal.matcher import Matcher
 from sqlalchemy.exc import NoResultFound
 
 from ..controller import team_controller
 from ..dao import spec_dao
-from ..dao.team_dao import insert_new_team, get_available_team_by_group_id
+from ..dao.team_dao import insert_new_team, get_available_team_by_group_id, get_team_detail
 from ..dao.member_dao import insert_new_member
 from ..infrastructure.llm_client import LLMChatResult
 from ..model.entity.team import Team
@@ -32,8 +32,8 @@ async def create_team(message: Event, event: GroupMessageEvent):
     msg = full_command[2:].strip()
     try:
         team_info = await insert_new_team(str(event.group_id),
-                                           str(event.sender.user_id),
-                                           msg)
+                                          str(event.sender.user_id),
+                                          msg)
         logger.info(team_info)
     except Exception as e:
         logger.error(e)
@@ -42,21 +42,21 @@ async def create_team(message: Event, event: GroupMessageEvent):
     if team_info:
         logger.info(f"创建在{team_info.start_time}的团队{team_info.team_name}成功！")
         await team_controller.create_team.finish(
-                f"创建在{team_info.start_time}的团队{team_info.team_name}成功！")
+            f"创建在{team_info.start_time}的团队{team_info.team_name}成功！")
     else:
         logger.error("数据服务请求错误")
         await team_controller.create_team.finish("服务器内部错误，请联系管理员")
 
 
+async def get_available_team_list(group_number: str, sender: str) -> list[TeamInfoVo]:
+    return await get_available_team_by_group_id(group_number, sender)
 
-async def get_available_team_list(group_number: str) -> list[Team]:
-    return await get_available_team_by_group_id(group_number)
 
 @team_controller.view_all_team.handle()
 async def view_all_team(message: Event, event: GroupMessageEvent):
-    team_info = await get_available_team_list(str(event.group_id))
+    team_info = await get_available_team_list(str(event.group_id), str(event.sender.user_id))
     if len(team_info) > 0:
-        await send_team_list_to_group(team_controller.view_all_team,team_info)
+        await send_team_list_to_group(team_controller.view_all_team, team_info)
         await team_controller.view_all_team.finish()
     else:
         await team_controller.view_all_team.finish("当前暂无在开团队！")
@@ -66,45 +66,21 @@ async def view_all_team(message: Event, event: GroupMessageEvent):
 async def view_team(message: Event, event: GroupMessageEvent):
     full_command = message.get_plaintext()
     command_list = full_command.strip().split()
+    msg = " ".join(command_list[1:])
 
-    if len(command_list) > 2:
-        await team_controller.view_team.finish("参数过多！")
-    team_list = await get_available_team_list(str(event.group_id))
+    team_info = await get_team_detail(str(event.group_id), str(event.sender.user_id), msg)
 
-    if len(command_list) == 1:
-        if len(team_list) > 0:
-            await send_team_list_to_group(team_controller.view_team, team_list)
-            await team_controller.view_team.finish()
-        else:
-            await team_controller.view_team.finish("当前暂无在开团队！")
-
-    team_list = await get_available_team_list(str(event.group_id))
-    team_info = None
-    if command_list[1].isdecimal():
-        if int(command_list[1])<=0 or int(command_list[1]) > len(team_list):
-            await team_controller.view_team.finish("请输入正确的团队序号！")
-        else:
-            team_info = team_list[int(command_list[1]) - 1]
-    else:
-        if command_list[1] in [team.team_name for team in team_list]:
-            team_info = next((team for team in team_list if team.team_name == command_list[1]),None)
-        else:
-            await team_controller.view_team.finish("请输入正确的团队名称！")
-
-    team_index = team_list.index(team_info) + 1
+    team_index = team_info.team_no
     image_bytes = await render_team_panel_for_team(team_info, team_no=team_index)
     await team_controller.view_team.finish(MessageSegment.image(file=image_bytes))
 
 
-
-async def send_team_list_to_group(matcher:Matcher,team_info:list[Team]):
+async def send_team_list_to_group(matcher: Matcher, team_info: list[TeamInfoVo]):
     content = "当前所有在开团队如下：\n"
-    for index,team in enumerate(team_info):
+    for index, team in enumerate(team_info):
         start_time = format_datatime_str(team.start_time)
         temp = f"{index + 1}： {start_time},团队名称：{team.team_name}\n"
         content += temp
     content = content[:-1]
     await matcher.send(content)
     pass
-
-

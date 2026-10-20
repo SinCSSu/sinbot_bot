@@ -24,6 +24,8 @@ from .binding import Header, RawBody, get, post
 
 __all__ = ["MemberApi", "SpecApi", "TeamApi"]
 
+from ..model.vo.team_detail_vo import TeamDetailVo
+
 from ..model.vo.team_info_vo import TeamInfoVo
 
 
@@ -37,28 +39,28 @@ class TeamApi:
 
     @post("/team/createTeam")
     async def create(
-        self,
-        msg: Annotated[str, RawBody()],
-        group_number: Annotated[str, Header("X-Group-Number")],
-        sender: Annotated[str, Header("X-Operator-Qq")],
+            self,
+            msg: Annotated[str, RawBody()],
+            group_number: Annotated[str, Header("X-Group-Number")],
+            sender: Annotated[str, Header("X-Operator-Qq")],
     ) -> TeamInfoVo:
         """开团：原样转发群消息（对应 team_dao.insert_new_team）。"""
 
     @post("/team/getAvailableTeamsByGroupNumber")
     async def list_available(
-        self,
-        group_number: Annotated[str, Header("X-Group-Number")],
-        sender: Annotated[str, Header("X-Operator-Qq")],
+            self,
+            group_number: Annotated[str, Header("X-Group-Number")],
+            sender: Annotated[str, Header("X-Operator-Qq")],
     ) -> list[TeamInfoVo]:
         """查询群里仍在进行的团队（对应 team_dao.get_available_team_by_group_id）。"""
 
-    @post("/teams/getTeamInfo")
-    async def get(
-        self,
-        team_id: int,
-        group_number: Annotated[str, Header("X-Group-Number")],
-        sender: Annotated[str, Header("X-Operator-Qq")],
-    ) -> Team | None:
+    @post("/teams/getTeamDetail")
+    async def get_team_detail(
+            self,
+            msg: Annotated[str, RawBody()],
+            group_number: Annotated[str, Header("X-Group-Number")],
+            sender: Annotated[str, Header("X-Operator-Qq")],
+    ) -> TeamDetailVo | None:
         """按 id 查单个团队。"""
 
 
