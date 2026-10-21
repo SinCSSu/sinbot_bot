@@ -25,4 +25,5 @@ class TeamInfoVo(BaseModel):
     locker: str | None = None
     salary: int | None = None
     create_by: str | None = None
+    team_no : int | None = None
 
