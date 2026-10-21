@@ -1,12 +1,12 @@
-name: sinbot
+name: sinbot-bot
 
 services:
-  sinbot:
+  sinbot-bot:
     build:
       context: .
       dockerfile: Dockerfile
-    image: sinbot:latest
-    container_name: sinbot
+    image: sinbot-bot:latest
+    container_name: sinbot-bot
     restart: unless-stopped
     stop_grace_period: 30s
 
@@ -15,36 +15,15 @@ services:
     env_file:
       - .env.deploy
 
-    # 若不便使用 env_file，可改用下面的形式（值来自仓库根目录的 .env，Compose 会自动加载）：
-    # environment:
-    #   NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR}
-    #   NACOS_DATA_IDS: ${NACOS_DATA_IDS}
-
-    # 容器无状态：业务数据全部来自数据中台，不挂数据库卷。
-    # jm 下载的 PDF 会落到容器内 /app/sinbot/plugins/jm_download/download_path，
-    # 需要跨重建保留产物时再启用下面的卷。
-    # volumes:
-    #   - sinbot-jm:/app/sinbot/plugins/jm_download/download_path
-
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
 
-    # 连接宿主机上的 NapCat（Nacos 的 ONEBOT_WS_URLS 为 ws://127.0.0.1:3001 这类回环地址时）：
-    #   · Linux —— 取消下一行注释，直接复用宿主机网络栈
-    # network_mode: host
-    #   · Windows / macOS（Docker Desktop）—— 把 URL 改成 ws://host.docker.internal:3001，
-    #     或取消下面两行注释添加主机映射
-    # extra_hosts:
-    #   - "host.docker.internal:host-gateway"
+    networks:
+      - snowluma_default
 
-    # Nacos 端口：nacos-sdk-python 3.x 走 async + gRPC，除 8848(HTTP) 外还要求
-    # 9848(gRPC) 可达（= 8848 + port_offset 默认 1000）。若 Nacos 跑在另一个
-    # 容器里，需同时映射这两个端口，例如 -p 8848:8848 -p 9848:9848；
-    # 只映射 8848 会导致 gRPC 通道建立失败。使用 network_mode: host 时不受限。
-
-# 需要保留 jm 下载产物时取消注释并同步启用上面的 volumes
-# volumes:
-#   sinbot-jm:
+networks:
+  snowluma_default:
+    external: true
