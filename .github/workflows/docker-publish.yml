@@ -84,7 +84,8 @@ jobs:
       - name: Trigger domestic sync via webhook
         if: success()
         env:
-          SOURCE_IMAGE: "ghcr.io/${{ github.repository }}:${{ github.sha }}"
+          # 复用 meta 步骤已转小写的镜像名，避免 github.repository 原始大小写导致 crane 解析失败
+          SOURCE_IMAGE: "${{ steps.meta.outputs.image }}:${{ github.sha }}"
           TARGET_IMAGE: "${{vars.TCR_REGISTRY}}/${{vars.TCR_NAMESPACE}}/${{vars.IMAGE_NAME}}:${{ github.sha }}"
           DEPLOY_COMMAND: "deploy-sinbot-bot"
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
