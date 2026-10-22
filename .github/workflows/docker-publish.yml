@@ -1,4 +1,4 @@
-name: Build & Deploy
+name: Build & Publish
 
 # 合并（PR merge / squash merge）到 master 后，GitHub 会向 master 产生一次 push 事件，
 # 因此监听 push 即可覆盖"merge 时触发"。另外保留手动触发用于回滚/补发。
@@ -6,7 +6,7 @@ on:
   push:
     branches:
       - master
-    # 仅代码或构建相关文件变化时才重新构建，跳过纯文档提交
+    # 纯文档提交不重新构建镜像
     paths-ignore:
       - "**.md"
       - "docs/**"
@@ -17,17 +17,17 @@ concurrency:
   group: docker-${{ github.ref }}
   cancel-in-progress: true
 
+# 推送到 GHCR 需要 packages:write；GITHUB_TOKEN 由 Actions 自动注入，无需手工配置
+permissions:
+  contents: read
+  packages: write
+
 env:
-  # 以下全部来自仓库 Settings → Secrets and variables → Actions
-  #   vars.TCR_REGISTRY   例：ccr.ccs.tencentyun.com（个人版）
-  #                           或 xxx.tencentcloudcr.com（企业版，带地域域名）
-  #   vars.TCR_NAMESPACE  例：sinbot
-  #   vars.IMAGE_NAME     例：sinbot
-  IMAGE: ${{ vars.TCR_REGISTRY }}/${{ vars.TCR_NAMESPACE }}/${{ vars.IMAGE_NAME }}
+  REGISTRY: ghcr.io
 
 jobs:
-  build-push-deploy:
-    name: Build → Push TCR → Deploy
+  build-push:
+    name: Build → Push GHCR
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -41,9 +41,11 @@ jobs:
           set -euo pipefail
           SHA_SHORT="$(echo "${GITHUB_SHA}" | cut -c1-7)"
           DATE_TAG="$(date -u +%Y%m%d-%H%M%S)"
+          # GHCR 镜像名必须全小写，而 github.repository 可能含大写（账号或仓库名）
+          REPO_LC="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
           {
+            echo "image=${REGISTRY}/${REPO_LC}"
             echo "sha=${SHA_SHORT}"
-            echo "date=${DATE_TAG}"
             echo "version=${DATE_TAG}-${SHA_SHORT}"
           } >> "$GITHUB_OUTPUT"
 
@@ -53,12 +55,12 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Tencent TCR
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ vars.TCR_REGISTRY }}
-          username: ${{ secrets.TCR_USERNAME }}
-          password: ${{ secrets.TCR_PASSWORD }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -69,9 +71,9 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ env.IMAGE }}:latest
-            ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
-            ${{ env.IMAGE }}:${{ steps.meta.outputs.sha }}
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha }}
           # 标签写进镜像，便于线上追溯来源 commit
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -79,47 +81,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Trigger deploy webhook
-        if: success()
-        env:
-          WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
-          WEBHOOK_TOKEN: ${{ secrets.DEPLOY_WEBHOOK_TOKEN }}
-          IMAGE: ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
-        run: |
-          set -euo pipefail
-          if [ -z "${WEBHOOK_URL}" ]; then
-            echo "::error::DEPLOY_WEBHOOK_URL 未配置——镜像已推送但不会部署，请补齐 secret"
-            exit 1
-          fi
-
-          # 认证方式二选一，按接收端实现取用：
-          #   X-Deploy-Token: ${WEBHOOK_TOKEN}
-          #   Authorization: Bearer ${WEBHOOK_TOKEN}
-          curl --fail-with-body --silent --show-error \
-            --retry 5 --retry-delay 5 --retry-all-errors \
-            --max-time 60 \
-            -X POST "${WEBHOOK_URL}" \
-            -H "Content-Type: application/json" \
-            -H "X-Deploy-Token: ${WEBHOOK_TOKEN}" \
-            -d "{
-                  \"image\": \"${IMAGE}\",
-                  \"tag\": \"${{ steps.meta.outputs.version }}\",
-                  \"sha\": \"${GITHUB_SHA}\",
-                  \"ref\": \"${GITHUB_REF_NAME}\",
-                  \"repository\": \"${GITHUB_REPOSITORY}\",
-                  \"actor\": \"${GITHUB_ACTOR}\"
-                }"
-
       - name: Summary
         if: always()
         run: |
           {
-            echo "### 部署流水线结果"
+            echo "### 镜像构建结果"
             echo ""
             echo "| 项 | 值 |"
             echo "| --- | --- |"
             echo "| 状态 | ${{ job.status }} |"
-            echo "| 镜像 | \`${{ env.IMAGE }}:${{ steps.meta.outputs.version }}\` |"
+            echo "| 镜像 | \`${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}\` |"
             echo "| Commit | \`${{ github.sha }}\` |"
             echo "| 触发者 | @${{ github.actor }} |"
           } >> "$GITHUB_STEP_SUMMARY"
