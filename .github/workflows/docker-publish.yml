@@ -86,7 +86,7 @@ jobs:
         env:
           SOURCE_IMAGE: "ghcr.io/${{ github.repository }}:${{ github.sha }}"
           TARGET_IMAGE: "${{vars.TCR_REGISTRY}}/${{vars.TCR_NAMESPACE}}/${{vars.IMAGE_NAME}}:${{ github.sha }}"
-          DEPLOY_COMMAND: "deploy-my-app"
+          DEPLOY_COMMAND: "deploy-sinbot-bot"
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
         run: |
           PAYLOAD=$(jq -n \
