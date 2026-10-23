@@ -1,19 +1,42 @@
-name: sinbot-bot
+# SinBot 运行栈（仓库根，本地构建 / 单机部署）
+#
+#   cp .env.deploy.example .env.deploy    # 填 NACOS_SERVER_ADDR 等引导参数
+#   docker compose up -d --build
+#   docker compose logs -f sinbot
+#
+# 面板 webhook 部署用的是 sh/sinbot/docker-compose.yml（结构相同，去掉 build、
+# 镜像指向镜像仓库），由 sh/scripts/deploy.sh 调起；改服务定义时两份要对齐。
+
+name: sinbot
 
 services:
-  sinbot-bot:
+  sinbot:
     build:
       context: .
       dockerfile: Dockerfile
-    image: sinbot-bot:latest
-    container_name: sinbot-bot
+    # 本地构建出的标签；CI 部署时可用 SINBOT_IMAGE 指向仓库里的镜像
+    image: ${SINBOT_IMAGE:-sinbot:latest}
+    container_name: sinbot
     restart: unless-stopped
-    stop_grace_period: 30s
+    stop_grace_period: 15s
 
-    # Nacos 引导参数由该文件注入（复制 .env.deploy.example 为 .env.deploy 后填写）。
-    # 业务配置（OneBot 连接、插件参数等）仍由 Nacos 统一下发，不进镜像。
+    # 启动期唯一需要的本地配置：NACOS_* 与 TZ（DRIVER 已固定在镜像内）
     env_file:
       - .env.deploy
+
+    # 机器人是 OneBot V11 反向 WS 客户端，只主动外连协议端，不监听端口
+    # 因此不声明 ports / expose。
+    # Nacos、NapCat 跑在宿主机时，用 host.docker.internal 访问：
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Linux 下若 Nacos 上的 ONEBOT_WS_URLS 是回环地址（ws://127.0.0.1:3001），
+    # 可改用 host 网络（与上面的 extra_hosts 互斥，二选一）：
+    # network_mode: host
+
+    # 镜像无状态，唯一落盘是 jm_download 的 PDF，默认随容器删除；
+    # 需要跨重建保留时取消注释（注意属主为 UID 10001）：
+    # volumes:
+    #   - sinbot-jm:/app/sinbot/plugins/jm_download/download_path
 
     logging:
       driver: json-file
@@ -21,9 +44,5 @@ services:
         max-size: "10m"
         max-file: "3"
 
-    networks:
-      - snowluma_default
-
-networks:
-  snowluma_default:
-    external: true
+volumes:
+  sinbot-jm:
